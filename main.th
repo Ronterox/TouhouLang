@@ -1,0 +1,28 @@
+the title is "The search of something".
+
+the player is named reimu,
+reimu can shoot up and has a speed of twelve.
+
+the enemy's pattern is (left right right left),
+and its shoot pattern is (down down down down).
+
+the enemy is marissa, she has 200 health, and moves on her pattern,
+and shoots on her shoot_pattern.
+
+when the scene starts reimu appears at the center of the screen,
+and then moves down to the bottom in 2 seconds.
+
+when the scene starts marissa fades in at the top.
+
+the scene starts.
+
+reimu's image is reimu.png.
+marissas's image is marissa.png.
+
+reimu says "Hi there Marissa",
+marissa says "Hi there Reimu".
+
+the game starts when reimu starts to shoot.
+when the game starts marissa moves and shoots.
+
+if marissa dies display "You Win!" else if reimu dies display "You lost...".
