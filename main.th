@@ -6,7 +6,7 @@ reimu can shoot up and has a speed of twelve.
 the enemy's pattern is (left right right left),
 and its shoot pattern is (down down down down).
 
-the enemy is marissa, she has 200 health, and moves on her pattern,
+the enemy is named marissa, she has 200 health, and moves on her pattern,
 and shoots with her shoot_pattern.
 
 when the scene starts reimu appears at the center of the screen,

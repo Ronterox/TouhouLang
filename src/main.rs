@@ -1,4 +1,4 @@
-use std::env::args;
+use std::{collections::HashMap, env::args};
 
 const NUM_KEYWORDS: [&str; 26] = [
     "zero",
@@ -29,8 +29,8 @@ const NUM_KEYWORDS: [&str; 26] = [
     "seventy",
 ];
 
-const KEYWORDS: [&str; 12] = [
-    "if", "else", "is", "it", "and", "with", "when", "to", "can", "in", "out", "on",
+const KEYWORDS: [&str; 13] = [
+    "if", "else", "is", "it", "and", "with", "when", "to", "can", "in", "out", "on", "named",
 ];
 
 const POSITION_KEYWORDS: [&str; 6] = ["up", "down", "left", "right", "top", "bottom"];
@@ -82,12 +82,12 @@ fn parse_num_word(word: &str) -> String {
     .to_string()
 }
 
-fn parse_word(word_chars: &mut Vec<char>, context: char) -> char {
+fn tokenize_word(word_chars: &mut Vec<char>, context: char, tokens: &mut Vec<Token>) -> char {
     let word: String = word_chars.iter().collect();
     word_chars.clear();
 
     let word = match word.trim() {
-        "the" | "named" | "then" | "a" | "an" | "at" => "",
+        "the" | "then" | "a" | "an" | "at" => "",
         _ => word.trim(),
     };
 
@@ -121,25 +121,25 @@ fn parse_word(word_chars: &mut Vec<char>, context: char) -> char {
         token = Token::Variable(word.to_string());
     }
 
-    println!("{:?}", token);
+    tokens.push(token);
     char::default()
 }
 
-fn parse_line(line: &str) {
+fn tokenize_line(line: &str, tokens: &mut Vec<Token>) {
     let mut word_chars = Vec::<char>::new();
     let mut context = char::default();
     let mut chars = line.chars().enumerate();
 
     while let Some((i, c)) = chars.next() {
         if c.is_whitespace() && !context.is_ascii_punctuation() || context == c {
-            context = parse_word(&mut word_chars, context);
+            context = tokenize_word(&mut word_chars, context, tokens);
         } else if c.is_ascii_punctuation() && !context.is_ascii_punctuation() {
             if !word_chars.is_empty() {
-                context = parse_word(&mut word_chars, context);
+                context = tokenize_word(&mut word_chars, context, tokens);
             }
 
             if c == ',' {
-                parse_line(line.split_at(i + 1).1);
+                tokenize_line(line.split_at(i + 1).1, tokens);
                 break;
             }
 
@@ -155,18 +155,70 @@ fn parse_line(line: &str) {
     }
 
     if !word_chars.is_empty() {
-        parse_word(&mut word_chars, context);
+        tokenize_word(&mut word_chars, context, tokens);
     }
 }
 
-fn parse_text(text: &String) {
+fn tokenize_text(text: &str) -> Vec<Token> {
+    let mut tokens = Vec::new();
     text.split(".\n")
         .filter(|line| line.len() > 0)
-        .enumerate()
-        .for_each(|(i, line)| {
-            println!("\nLine {}: {}\nParsed:", i + 1, line);
-            parse_line(line);
+        .for_each(|line| {
+            tokenize_line(line, &mut tokens);
         });
+    tokens
+}
+
+fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>) {
+    let tokens = tokenize_text(text);
+    let mut tokens = tokens.iter();
+
+    let mut actions: Vec<(&String, &String)> = Vec::new();
+    let mut variables: HashMap<&str, &str> = HashMap::new();
+
+    while let Some(token) = tokens.next() {
+        if let Token::Variable(name) = token {
+            match tokens.next().expect("expected token after variable") {
+                Token::Keyword(keyword) => match keyword.as_str() {
+                    "is" => {
+                        let value = match tokens.next().expect("expected value after 'is'") {
+                            Token::Variable(varname) => variables
+                                .get(varname.as_str())
+                                .expect("expected variable value"),
+                            Token::Text(text) => text.as_str(),
+                            Token::Keyword(kword) => match kword.as_str() {
+                                "named" => {
+                                    match tokens.next().expect("expected name after 'named'") {
+                                        Token::Variable(name) => name,
+                                        _ => "",
+                                    }
+                                }
+                                _ => "",
+                            },
+                            Token::Number(num) => num,
+                            _ => "",
+                        };
+                        variables.insert(name, value);
+                    }
+                    _ => {}
+                },
+                Token::Method(method) => {
+                    actions.push((name, method));
+                }
+                _ => {}
+            }
+        }
+    }
+    let vars: HashMap<String, String> = variables
+        .iter_mut()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect();
+    let actions: Vec<(String, String)> = actions
+        .iter_mut()
+        .map(|(a, b)| (a.to_owned(), b.to_owned()))
+        .collect();
+
+    (vars, actions)
 }
 
 fn main() -> std::io::Result<()> {
@@ -174,7 +226,7 @@ fn main() -> std::io::Result<()> {
 
     if let Some(main_file) = args.get(1) {
         let file = std::fs::read_to_string(main_file)?;
-        parse_text(&file);
+        let (_, _) = parse_text(&file);
     } else {
         Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -187,10 +239,22 @@ fn main() -> std::io::Result<()> {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
+    use crate::parse_text;
 
     #[test]
-    fn test_main_missing_filepath() {
-        let result = super::main();
-        assert!(result.is_err());
+    fn test_keyword_is() {
+        let expect = |text: &str, result: (&str, &str)| {
+            let (mut vars, _) = parse_text(text);
+            let vars: HashMap<&str, &str> = vars
+                .iter_mut()
+                .map(|(a, b)| (a.as_str(), b.as_str()))
+                .collect();
+
+            dbg!(&vars);
+            assert!(vars == HashMap::from([result]));
+        };
+        expect("reimu is 18", ("reimu", "18"));
     }
 }
