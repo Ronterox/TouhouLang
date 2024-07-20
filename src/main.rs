@@ -1,6 +1,6 @@
 use std::{collections::HashMap, env::args};
 
-const NUM_KEYWORDS: [&str; 26] = [
+const NUM_KEYWORDS: [&str; 29] = [
     "zero",
     "one",
     "two",
@@ -27,10 +27,13 @@ const NUM_KEYWORDS: [&str; 26] = [
     "fifty",
     "sixty",
     "seventy",
+    "eighty",
+    "ninety",
+    "hundred",
 ];
 
-const KEYWORDS: [&str; 13] = [
-    "if", "else", "is", "it", "and", "with", "when", "to", "can", "in", "out", "on", "named",
+const KEYWORDS: [&str; 12] = [
+    "if", "else", "is", "it", "and", "with", "when", "to", "can", "in", "out", "on",
 ];
 
 const POSITION_KEYWORDS: [&str; 6] = ["up", "down", "left", "right", "top", "bottom"];
@@ -38,7 +41,7 @@ const POSSESIVE_KEYWORDS: [&str; 3] = ["its", "has", "of"];
 
 const GLOBAL_METHODS: [&str; 1] = ["display"];
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Token {
     Method(String),
     Property(String),
@@ -77,6 +80,9 @@ fn parse_num_word(word: &str) -> String {
         "fifty" => "50",
         "sixty" => "60",
         "seventy" => "70",
+        "eighty" => "80",
+        "ninety" => "90",
+        "hundred" => "100",
         _ => word,
     }
     .to_string()
@@ -104,6 +110,7 @@ fn tokenize_word(word_chars: &mut Vec<char>, context: char, tokens: &mut Vec<Tok
         if word.is_empty() {
             return context;
         } else {
+            dbg!(word);
             token = Token::Property(word.to_string());
         }
     } else if GLOBAL_METHODS.contains(&word) {
@@ -113,6 +120,11 @@ fn tokenize_word(word_chars: &mut Vec<char>, context: char, tokens: &mut Vec<Tok
         || POSITION_KEYWORDS.contains(&word)
     {
         token = Token::Keyword(word.to_string());
+        if word == "of" {
+            if let Some(Token::Variable(varname)) = tokens.last() {
+                *tokens.last_mut().unwrap() = Token::Property(varname.to_owned());
+            }
+        }
     } else if word.chars().all(char::is_numeric) || NUM_KEYWORDS.contains(&word) {
         token = Token::Number(parse_num_word(&word));
     } else if word.ends_with('s') {
@@ -169,56 +181,87 @@ fn tokenize_text(text: &str) -> Vec<Token> {
     tokens
 }
 
+fn parse_word_value(token: Token, variables: &HashMap<String, String>) -> String {
+    match token {
+        Token::Variable(varname) => variables
+            .get(&varname)
+            .expect("expected variable value")
+            .to_owned(),
+        Token::Number(num) => num,
+        Token::Text(text) => text,
+        Token::List(list) => list,
+        _ => "".to_owned(),
+    }
+}
+
+fn next_token<'a>(tokens: &mut impl Iterator<Item = &'a Token>, error: &str) -> &'a Token {
+    tokens.next().expect(format!("expected {error}").as_str())
+}
+
+fn update_variable<'a>(
+    name: String,
+    error: &str,
+    variables: &mut HashMap<String, String>,
+    tokens: &mut impl Iterator<Item = &'a Token>,
+) {
+    let token = next_token(tokens, &error).clone();
+    let value = parse_word_value(token, variables);
+    variables.insert(name, value);
+}
+
 fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>) {
     let tokens = tokenize_text(text);
-    let mut tokens = tokens.iter();
+    dbg!(&tokens);
 
-    let mut actions: Vec<(&String, &String)> = Vec::new();
-    let mut variables: HashMap<&str, &str> = HashMap::new();
+    let mut tokens = tokens.iter();
+    let mut actions: Vec<(String, String)> = Vec::new();
+    let mut variables: HashMap<String, String> = HashMap::new();
 
     while let Some(token) = tokens.next() {
-        if let Token::Variable(name) = token {
-            match tokens.next().expect("expected token after variable") {
-                Token::Keyword(keyword) => match keyword.as_str() {
-                    "is" => {
-                        let value = match tokens.next().expect("expected value after 'is'") {
-                            Token::Variable(varname) => variables
-                                .get(varname.as_str())
-                                .expect("expected variable value"),
-                            Token::Text(text) => text.as_str(),
-                            Token::Keyword(kword) => match kword.as_str() {
-                                "named" => {
-                                    match tokens.next().expect("expected name after 'named'") {
-                                        Token::Variable(name) => name,
-                                        _ => "",
-                                    }
-                                }
-                                _ => "",
-                            },
-                            Token::Number(num) => num,
-                            _ => "",
-                        };
-                        variables.insert(name, value);
-                    }
+        match token {
+            Token::Variable(name) => match next_token(&mut tokens, "token after variable") {
+                Token::Keyword(keyword) if keyword == "is" => update_variable(
+                    name.to_owned(),
+                    "value after 'is'",
+                    &mut variables,
+                    &mut tokens,
+                ),
+                Token::Property(property) => match next_token(&mut tokens, "keyword") {
+                    Token::Keyword(keyword) if keyword == "is" => update_variable(
+                        format!("{name}.{property}"),
+                        "value after 'is'",
+                        &mut variables,
+                        &mut tokens,
+                    ),
                     _ => {}
                 },
                 Token::Method(method) => {
-                    actions.push((name, method));
+                    actions.push((name.to_owned(), method.to_owned()));
                 }
                 _ => {}
-            }
+            },
+            Token::Property(property) => match next_token(&mut tokens, "keyword") {
+                Token::Keyword(keyword) if keyword == "of" => {
+                    match next_token(&mut tokens, "variable after 'of'") {
+                        Token::Variable(name) => match next_token(&mut tokens, "keyword") {
+                            Token::Keyword(keyword) if keyword == "is" => update_variable(
+                                format!("{name}.{property}"),
+                                "value after 'is'",
+                                &mut variables,
+                                &mut tokens,
+                            ),
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+                _ => {}
+            },
+            _ => (),
         }
     }
-    let vars: HashMap<String, String> = variables
-        .iter_mut()
-        .map(|(a, b)| (a.to_string(), b.to_string()))
-        .collect();
-    let actions: Vec<(String, String)> = actions
-        .iter_mut()
-        .map(|(a, b)| (a.to_owned(), b.to_owned()))
-        .collect();
 
-    (vars, actions)
+    (variables, actions)
 }
 
 fn main() -> std::io::Result<()> {
@@ -239,22 +282,64 @@ fn main() -> std::io::Result<()> {
 
 #[cfg(test)]
 mod test {
+    use crate::parse_text;
     use std::collections::HashMap;
 
-    use crate::parse_text;
+    fn expect<const N: usize>(text: &str, result: [(&str, &str); N]) {
+        let (mut vars, _) = parse_text(text);
+        let vars: HashMap<&str, &str> = vars
+            .iter_mut()
+            .map(|(a, b)| (a.as_str(), b.as_str()))
+            .collect();
+
+        dbg!(&vars);
+        assert_eq!(vars, HashMap::from(result));
+    }
+
+    fn expect_fail(text: &str) {
+        assert!(std::panic::catch_unwind(|| parse_text(text)).is_err());
+    }
 
     #[test]
     fn test_keyword_is() {
-        let expect = |text: &str, result: (&str, &str)| {
-            let (mut vars, _) = parse_text(text);
-            let vars: HashMap<&str, &str> = vars
-                .iter_mut()
-                .map(|(a, b)| (a.as_str(), b.as_str()))
-                .collect();
+        expect_fail("reimu is reimu");
 
-            dbg!(&vars);
-            assert!(vars == HashMap::from([result]));
-        };
-        expect("reimu is 18", ("reimu", "18"));
+        expect("reimu is 18", [("reimu", "18")]);
+        expect("reimu is 18, reimu is reimu", [("reimu", "18")]);
+
+        expect(
+            "marissa is 18, reimu is marissa",
+            [("reimu", "18"), ("marissa", "18")],
+        );
+
+        expect(
+            "reimu is 18 and the player is reimu",
+            [("reimu", "18"), ("player", "18")],
+        );
+
+        expect("chan is twelve", [("chan", "12")]);
+
+        let text = "A donburin";
+        expect(format!("reimu is \"{text}\"").as_str(), [("reimu", text)]);
+    }
+
+    #[test]
+    fn test_properties() {
+        expect_fail("reimu's donburin is marissa");
+        let text = "A mage";
+        expect(
+            format!("marissa is \"{text}\", reimu's donburin is a marissa").as_str(),
+            [("marissa", text), ("reimu.donburin", text)],
+        );
+        expect("reimu's donburin is 10", [("reimu.donburin", "10")]);
+        expect(
+            "the enemy's pattern is (left right right left)",
+            [("enemy.pattern", "left right right left")],
+        );
+
+        expect(
+            "the health of marissa is a hundred",
+            [("marissa.health", "100")],
+        );
     }
 }

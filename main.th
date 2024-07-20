@@ -1,7 +1,6 @@
 the title is "The search of something".
 
-the player is named reimu,
-reimu can shoot up and has a speed of twelve.
+the player is reimu, reimu can shoot up and has a speed of twelve.
 
 the enemy's pattern is (left right right left),
 and its shoot pattern is (down down down down).
