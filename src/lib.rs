@@ -1,3 +1,6 @@
+mod macros;
+
+use macros::concat;
 use std::collections::HashMap;
 
 const NUM_KEYWORDS: [&str; 29] = [
@@ -32,17 +35,24 @@ const NUM_KEYWORDS: [&str; 29] = [
     "hundred",
 ];
 
-const KEYWORDS: [&str; 12] = [
+const CONTROL_KEYWORDS: [&str; 12] = [
     "if", "else", "is", "it", "and", "with", "when", "to", "can", "in", "out", "on",
 ];
-
 const POSITION_KEYWORDS: [&str; 6] = ["up", "down", "left", "right", "top", "bottom"];
 const POSSESIVE_KEYWORDS: [&str; 3] = ["its", "has", "of"];
+const OBJECT_KEYWORDS: [&str; 2] = ["enemy", "player"];
+
+const KEYWORDS: [&str; 23] = concat_array!(
+    CONTROL_KEYWORDS,
+    POSITION_KEYWORDS,
+    POSSESIVE_KEYWORDS,
+    OBJECT_KEYWORDS
+);
 
 const GLOBAL_METHODS: [&str; 1] = ["display"];
 
 #[derive(Debug, Clone)]
-pub enum Token {
+enum Token {
     Method(String),
     Property(String),
     Variable(String),
@@ -94,10 +104,11 @@ fn tokenize_word(word_chars: &mut Vec<char>, context: char, tokens: &mut Vec<Tok
 
     let word = match word.trim() {
         "the" | "then" | "a" | "an" | "at" => "",
+        "are" => "is",
         _ => word.trim(),
     };
 
-    if word.is_empty() && context == char::default() {
+    if word.is_empty() {
         return context;
     }
 
@@ -107,18 +118,13 @@ fn tokenize_word(word_chars: &mut Vec<char>, context: char, tokens: &mut Vec<Tok
     } else if context == '"' {
         token = Token::Text(word.to_string());
     } else if context == 's' {
-        if word.is_empty() {
+        if word == "'s" {
             return context;
-        } else {
-            dbg!(word);
-            token = Token::Property(word.to_string());
         }
+        token = Token::Property(word.to_string());
     } else if GLOBAL_METHODS.contains(&word) {
         token = Token::Method(word.to_string());
-    } else if KEYWORDS.contains(&word)
-        || POSSESIVE_KEYWORDS.contains(&word)
-        || POSITION_KEYWORDS.contains(&word)
-    {
+    } else if KEYWORDS.contains(&word) {
         token = Token::Keyword(word.to_string());
         if word == "of" {
             if let Some(Token::Variable(varname)) = tokens.last() {
@@ -144,7 +150,9 @@ fn tokenize_line(line: &str, tokens: &mut Vec<Token>) {
 
     while let Some((i, c)) = chars.next() {
         if c.is_whitespace() && !context.is_ascii_punctuation() || context == c {
+            word_chars.push(c);
             context = tokenize_word(&mut word_chars, context, tokens);
+            continue;
         } else if c.is_ascii_punctuation() && !context.is_ascii_punctuation() {
             if !word_chars.is_empty() {
                 context = tokenize_word(&mut word_chars, context, tokens);
@@ -161,9 +169,8 @@ fn tokenize_line(line: &str, tokens: &mut Vec<Token>) {
                 '\'' => 's',
                 _ => char::default(),
             };
-        } else {
-            word_chars.push(c);
         }
+        word_chars.push(c);
     }
 
     if !word_chars.is_empty() {
@@ -187,6 +194,7 @@ fn parse_word_value(token: Token, variables: &HashMap<String, String>) -> String
             .get(&varname)
             .expect("expected variable value")
             .to_owned(),
+        Token::Keyword(varname) => varname,
         Token::Number(num) => num,
         Token::Text(text) => text,
         Token::List(list) => list,
@@ -194,26 +202,26 @@ fn parse_word_value(token: Token, variables: &HashMap<String, String>) -> String
     }
 }
 
-fn next_token<'a>(tokens: &mut impl Iterator<Item = &'a Token>, error: &str) -> &'a Token {
+fn next_token(tokens: &mut impl Iterator<Item = Token>, error: &str) -> Token {
     tokens.next().expect(format!("expected {error}").as_str())
 }
 
-fn update_variable<'a>(
+fn update_variable(
     name: String,
     error: &str,
     variables: &mut HashMap<String, String>,
-    tokens: &mut impl Iterator<Item = &'a Token>,
+    tokens: &mut impl Iterator<Item = Token>,
 ) {
-    let token = next_token(tokens, &error).clone();
+    let token = next_token(tokens, &error);
     let value = parse_word_value(token, variables);
     variables.insert(name, value);
 }
 
+// TODO: Generic parsing for actual rust types, so it outputs them out
 pub fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>) {
     let tokens = tokenize_text(text);
-    dbg!(&tokens);
 
-    let mut tokens = tokens.iter();
+    let mut tokens = tokens.into_iter();
     let mut actions: Vec<(String, String)> = Vec::new();
     let mut variables: HashMap<String, String> = HashMap::new();
 
@@ -297,33 +305,53 @@ mod test {
         );
 
         expect(
-            "reimu is 18 and the player is reimu",
-            [("reimu", "18"), ("player", "18")],
+            "reimu is 18 and the person is reimu",
+            [("reimu", "18"), ("person", "18")],
         );
 
         expect("chan is twelve", [("chan", "12")]);
 
-        let text = "A donburin";
-        expect(format!("reimu is \"{text}\"").as_str(), [("reimu", text)]);
+        let text = "\"A donburin\"";
+        expect(format!("reimu is {text}").as_str(), [("reimu", text)]);
     }
 
     #[test]
     fn test_properties() {
         expect_fail("reimu's donburin is marissa");
-        let text = "A mage";
+        let text = "\"A mage\"";
         expect(
-            format!("marissa is \"{text}\", reimu's donburin is a marissa").as_str(),
+            format!("marissa is {text}, reimu's donburin is a marissa").as_str(),
             [("marissa", text), ("reimu.donburin", text)],
         );
         expect("reimu's donburin is 10", [("reimu.donburin", "10")]);
         expect(
-            "the enemy's pattern is (left right right left)",
-            [("enemy.pattern", "left right right left")],
+            "the person's pattern is (left right right left)",
+            [("person.pattern", "(left right right left)")],
         );
 
         expect(
             "the health of marissa is a hundred",
             [("marissa.health", "100")],
+        );
+
+        expect("marissa's bullets are 20", [("marissa.bullets", "20")]);
+
+        // expect(
+        //     "marissa has 20 health",
+        //     [("marissa.health", "20")],
+        // );
+    }
+
+    #[test]
+    fn test_object_keywords() {
+        // expect(
+        //     "reimu is the player, and reimu has 20 bullets",
+        //     [("reimu", "player"), ("reimu.bullets", "20")],
+        // );
+
+        expect(
+            "reimu is the player, and marissa is the enemy",
+            [("reimu", "player"), ("marissa", "enemy")],
         );
     }
 }
