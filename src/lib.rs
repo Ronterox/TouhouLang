@@ -190,10 +190,7 @@ fn tokenize_text(text: &str) -> Vec<Token> {
 
 fn parse_word_value(token: Token, variables: &HashMap<String, String>) -> String {
     match token {
-        Token::Variable(varname) => variables
-            .get(&varname)
-            .expect("expected variable value")
-            .to_owned(),
+        Token::Variable(varname) => variables.get(&varname).unwrap_or(&varname).to_owned(),
         Token::Keyword(varname) => varname,
         Token::Number(num) => num,
         Token::Text(text) => text,
@@ -214,7 +211,12 @@ fn update_variable(
 ) {
     let token = next_token(tokens, &error);
     let value = parse_word_value(token, variables);
-    variables.insert(name, value);
+
+    if OBJECT_KEYWORDS.contains(&value.as_str()) {
+        variables.insert(value, name);
+    } else {
+        variables.insert(name, value);
+    }
 }
 
 // TODO: Generic parsing for actual rust types, so it outputs them out
@@ -234,7 +236,7 @@ pub fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>
                     &mut variables,
                     &mut tokens,
                 ),
-                Token::Property(property) => match next_token(&mut tokens, "keyword") {
+                Token::Property(property) => match next_token(&mut tokens, "keyword 'is'") {
                     Token::Keyword(keyword) if keyword == "is" => update_variable(
                         format!("{name}.{property}"),
                         "value after 'is'",
@@ -248,10 +250,10 @@ pub fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>
                 }
                 _ => {}
             },
-            Token::Property(property) => match next_token(&mut tokens, "keyword") {
+            Token::Property(property) => match next_token(&mut tokens, "keyword 'of'") {
                 Token::Keyword(keyword) if keyword == "of" => {
                     match next_token(&mut tokens, "variable after 'of'") {
-                        Token::Variable(name) => match next_token(&mut tokens, "keyword") {
+                        Token::Variable(name) => match next_token(&mut tokens, "keyword 'is'") {
                             Token::Keyword(keyword) if keyword == "is" => update_variable(
                                 format!("{name}.{property}"),
                                 "value after 'is'",
@@ -265,6 +267,16 @@ pub fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>
                 }
                 _ => {}
             },
+            Token::Keyword(name) if OBJECT_KEYWORDS.contains(&name.as_str()) => {
+                match next_token(&mut tokens, "keyword 'is'") {
+                    Token::Keyword(keyword) if keyword == "is" => {
+                        let token = next_token(&mut tokens, "value after 'is'");
+                        let value = parse_word_value(token, &variables);
+                        variables.insert(name, value);
+                    }
+                    _ => {}
+                }
+            }
             _ => (),
         }
     }
@@ -294,8 +306,6 @@ mod test {
 
     #[test]
     fn test_keyword_is() {
-        expect_fail("reimu is reimu");
-
         expect("reimu is 18", [("reimu", "18")]);
         expect("reimu is 18, reimu is reimu", [("reimu", "18")]);
 
@@ -317,12 +327,12 @@ mod test {
 
     #[test]
     fn test_properties() {
-        expect_fail("reimu's donburin is marissa");
         let text = "\"A mage\"";
         expect(
             format!("marissa is {text}, reimu's donburin is a marissa").as_str(),
             [("marissa", text), ("reimu.donburin", text)],
         );
+
         expect("reimu's donburin is 10", [("reimu.donburin", "10")]);
         expect(
             "the person's pattern is (left right right left)",
@@ -336,22 +346,23 @@ mod test {
 
         expect("marissa's bullets are 20", [("marissa.bullets", "20")]);
 
-        // expect(
-        //     "marissa has 20 health",
-        //     [("marissa.health", "20")],
-        // );
+        expect_fail("marissa has 20 health");
+        expect_fail("marissa's health is 20, marissa has 1 health");
+
+        expect("reimu's bullet speed is 20", [("reimu.bullet.speed", "20")]);
+        expect("the bullet speed of reimu is 10", [("reimu.bullet.speed", "10")]);
     }
 
     #[test]
     fn test_object_keywords() {
-        // expect(
-        //     "reimu is the player, and reimu has 20 bullets",
-        //     [("reimu", "player"), ("reimu.bullets", "20")],
-        // );
+        expect(
+            "the player is reimu, the enemy is marissa",
+            [("player", "reimu"), ("enemy", "marissa")],
+        );
 
         expect(
             "reimu is the player, and marissa is the enemy",
-            [("reimu", "player"), ("marissa", "enemy")],
+            [("player", "reimu"), ("enemy", "marissa")],
         );
     }
 }
