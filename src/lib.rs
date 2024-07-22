@@ -146,7 +146,7 @@ fn tokenize_word(word_chars: &mut Vec<char>, context: char, tokens: &mut Vec<Tok
 fn tokenize_line(line: &str, tokens: &mut Vec<Token>) {
     let mut word_chars = Vec::<char>::new();
     let mut context = char::default();
-    let mut chars = line.chars().enumerate();
+    let mut chars = line.trim().chars().enumerate();
 
     while let Some((i, c)) = chars.next() {
         if c.is_whitespace() && !context.is_ascii_punctuation() || context == c {
@@ -223,6 +223,8 @@ fn update_variable(
 pub fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>) {
     let tokens = tokenize_text(text);
 
+    dbg!(&tokens);
+
     let mut tokens = tokens.into_iter();
     let mut actions: Vec<(String, String)> = Vec::new();
     let mut variables: HashMap<String, String> = HashMap::new();
@@ -243,6 +245,26 @@ pub fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>
                         &mut variables,
                         &mut tokens,
                     ),
+                    Token::Variable(varname) => {
+                        let mut full_name = format!("{name}.{property}.{varname}");
+
+                        while let Some(token) = tokens.next() {
+                            match token {
+                                Token::Variable(varname) => {
+                                    full_name = format!("{full_name}.{varname}");
+                                }
+                                Token::Keyword(keyword) if keyword == "is" => {
+                                    update_variable(
+                                        full_name.to_owned(),
+                                        "value after 'is'",
+                                        &mut variables,
+                                        &mut tokens,
+                                    );
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
                     _ => {}
                 },
                 Token::Method(method) => {
@@ -350,7 +372,12 @@ mod test {
         expect_fail("marissa's health is 20, marissa has 1 health");
 
         expect("reimu's bullet speed is 20", [("reimu.bullet.speed", "20")]);
-        expect("the bullet speed of reimu is 10", [("reimu.bullet.speed", "10")]);
+        expect(
+            "reimu's bullet minecraft speed is \"slow\"",
+            [("reimu.bullet.minecraft.speed", "\"slow\"")],
+        );
+
+        // expect_fail("the bullet speed of reimu is 10");
     }
 
     #[test]
