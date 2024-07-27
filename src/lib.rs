@@ -181,7 +181,7 @@ fn tokenize_line(line: &str, tokens: &mut Vec<Token>) {
 fn tokenize_text(text: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
     text.split(".\n")
-        .filter(|line| line.len() > 0)
+        .filter(|line| line.len() > 0 && line.trim().chars().next().unwrap() != '#')
         .for_each(|line| {
             tokenize_line(line, &mut tokens);
         });
@@ -223,8 +223,6 @@ fn update_variable(
 pub fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>) {
     let tokens = tokenize_text(text);
 
-    dbg!(&tokens);
-
     let mut tokens = tokens.into_iter();
     let mut actions: Vec<(String, String)> = Vec::new();
     let mut variables: HashMap<String, String> = HashMap::new();
@@ -260,6 +258,7 @@ pub fn parse_text(text: &str) -> (HashMap<String, String>, Vec<(String, String)>
                                         &mut variables,
                                         &mut tokens,
                                     );
+                                    break;
                                 }
                                 _ => {}
                             }
@@ -391,5 +390,22 @@ mod test {
             "reimu is the player, and marissa is the enemy",
             [("player", "reimu"), ("enemy", "marissa")],
         );
+    }
+
+    #[test]
+    fn multiple_commands() {
+        expect(
+            "rei's bullet is 10, rei's bullet speed is 20, rei's name is \"rei\"",
+            [
+                ("rei.bullet", "10"),
+                ("rei.bullet.speed", "20"),
+                ("rei.name", "\"rei\""),
+            ],
+        );
+    }
+
+    #[test]
+    fn comments() {
+        expect("# rei's bullet is 10.\nrei is 15.\n", [("rei", "15")]);
     }
 }
