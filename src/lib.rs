@@ -91,7 +91,7 @@ fn parse(tokens: Vec<Token>) -> Vec<Data> {
                 value: Value::Single(c.clone()),
                 args: HashMap::new(),
             },
-            (Token::Identifier(a), Token::Possesive(_), Token::Identifier(c)) => {
+            (Token::Identifier(a), Token::Possesive(b), Token::Identifier(c)) if b == "s" => {
                 match (
                     tok.next().unwrap_or(&Token::None),
                     tok.next().unwrap_or(&Token::None),
@@ -101,10 +101,23 @@ fn parse(tokens: Vec<Token>) -> Vec<Data> {
                         value: Value::Object(Token::None),
                         args: HashMap::from([(c.to_string(), Value::Single(value.clone()))]),
                     },
-                    _ => panic!("Unexpected token: {a:?} {b:?} {c:?}"),
+                    (a, b) => panic!("Unexpected token: {a:?} {b:?}"),
                 }
             }
-            _ => panic!("Unexpected token: {a:?} {b:?} {c:?}"),
+            (Token::Identifier(a), Token::Possesive(b), Token::Identifier(c)) if b == "of" => {
+                match (
+                    tok.next().unwrap_or(&Token::None),
+                    tok.next().unwrap_or(&Token::None),
+                ) {
+                    (Token::Keyword(_), value) => Data {
+                        id: c.to_string(),
+                        value: Value::Object(Token::None),
+                        args: HashMap::from([(a.to_string(), Value::Single(value.clone()))]),
+                    },
+                    (a, b) => panic!("Unexpected token: {a:?} {b:?}"),
+                }
+            }
+            (a, b, c) => panic!("Unexpected token: {a:?} {b:?} {c:?}"),
         };
         data.push(parse_result);
     }
@@ -231,6 +244,22 @@ mod test_parser {
                 Token::Identifier("reimu".to_string()),
                 Token::Possesive("s".to_string()),
                 Token::Identifier("age".to_string()),
+                Token::Keyword("is".to_string()),
+                Token::Integer(17),
+            ],
+            [Data {
+                id: "reimu".to_string(),
+                value: Value::Object(Token::None),
+                args: HashMap::from([("age".to_string(), Value::Single(Token::Integer(17)))]),
+            }],
+        );
+
+        expect(
+            [
+                Token::Preposition("the".to_string()),
+                Token::Identifier("age".to_string()),
+                Token::Possesive("of".to_string()),
+                Token::Identifier("reimu".to_string()),
                 Token::Keyword("is".to_string()),
                 Token::Integer(17),
             ],
