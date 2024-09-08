@@ -1,13 +1,15 @@
 use core::panic;
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Clone)]
 enum Token {
     Preposition(String),
-    Posesive(String),
+    Possesive(String),
     Identifier(String),
     Keyword(String),
     Integer(i32),
     Float(f32),
+    None,
 }
 
 const PREPOSITIONS: [&str; 3] = ["the", "a", "an"];
@@ -36,7 +38,7 @@ fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
                 {
                     Token::Keyword(word)
                 } else if POSESIVES.contains(&word.as_str()) {
-                    Token::Posesive(word)
+                    Token::Possesive(word)
                 } else {
                     Token::Identifier(word)
                 }
@@ -59,17 +61,16 @@ fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
 }
 
 #[derive(Debug, PartialEq)]
-enum Identifier {
-    Object(String),
-    Value(String),
-    Event(String),
+enum Value {
+    Object(Token),
+    Single(Token),
 }
 
 #[derive(Debug, PartialEq)]
 struct Data {
-    identifier: Identifier,
-    value: Token,
-    parameters: Vec<Token>,
+    id: String,
+    value: Value,
+    args: HashMap<String, Value>,
 }
 
 #[allow(dead_code)]
@@ -81,15 +82,28 @@ fn parse(tokens: Vec<Token>) -> Vec<Data> {
     while let (Some(a), Some(b), Some(c)) = (tok.next(), tok.next(), tok.next()) {
         let parse_result = match (a, b, c) {
             (Token::Identifier(a), Token::Keyword(_), Token::Keyword(c)) => Data {
-                identifier: Identifier::Object(a.to_string()),
-                value: Token::Keyword(c.to_string()),
-                parameters: vec![],
+                id: a.to_string(),
+                value: Value::Object(Token::Keyword(c.to_string())),
+                args: HashMap::new(),
             },
             (Token::Identifier(a), Token::Keyword(_), c) => Data {
-                identifier: Identifier::Value(a.to_string()),
-                value: c.clone(),
-                parameters: vec![],
+                id: a.to_string(),
+                value: Value::Single(c.clone()),
+                args: HashMap::new(),
             },
+            (Token::Identifier(a), Token::Possesive(_), Token::Identifier(c)) => {
+                match (
+                    tok.next().unwrap_or(&Token::None),
+                    tok.next().unwrap_or(&Token::None),
+                ) {
+                    (Token::Keyword(_), value) => Data {
+                        id: a.to_string(),
+                        value: Value::Object(Token::None),
+                        args: HashMap::from([(c.to_string(), Value::Single(value.clone()))]),
+                    },
+                    _ => panic!("Unexpected token: {a:?} {b:?} {c:?}"),
+                }
+            }
             _ => panic!("Unexpected token: {a:?} {b:?} {c:?}"),
         };
         data.push(parse_result);
@@ -175,7 +189,7 @@ mod test_tokenizer {
             "mcdonald's",
             [
                 Token::Identifier("mcdonald".to_string()),
-                Token::Posesive("s".to_string()),
+                Token::Possesive("s".to_string()),
             ],
         );
     }
@@ -183,47 +197,64 @@ mod test_tokenizer {
 
 #[cfg(test)]
 mod test_parser {
-    use crate::{parse, Data, Identifier, Token};
+    use std::collections::HashMap;
+
+    use crate::{parse, Data, Token, Value};
+
+    fn expect<const N: usize, const M: usize>(input: [Token; N], output: [Data; M]) {
+        assert_eq!(parse(input.to_vec()), output);
+    }
 
     #[test]
     fn no_tokens_is_empty() {
-        assert_eq!(parse(vec![]), vec![]);
+        expect([], []);
     }
 
     #[test]
     fn parses_object() {
-        let input = vec![
-            Token::Identifier("reimu".to_string()),
-            Token::Keyword("is".to_string()),
-            Token::Preposition("the".to_string()),
-            Token::Keyword("player".to_string()),
-        ];
+        expect(
+            [
+                Token::Identifier("reimu".to_string()),
+                Token::Keyword("is".to_string()),
+                Token::Preposition("the".to_string()),
+                Token::Keyword("player".to_string()),
+            ],
+            [Data {
+                id: "reimu".to_string(),
+                value: Value::Object(Token::Keyword("player".to_string())),
+                args: HashMap::new(),
+            }],
+        );
 
-        assert_eq!(
-            parse(input),
-            vec![Data {
-                identifier: Identifier::Object("reimu".to_string()),
-                value: Token::Keyword("player".to_string()),
-                parameters: vec![],
-            }]
+        expect(
+            [
+                Token::Identifier("reimu".to_string()),
+                Token::Possesive("s".to_string()),
+                Token::Identifier("age".to_string()),
+                Token::Keyword("is".to_string()),
+                Token::Integer(17),
+            ],
+            [Data {
+                id: "reimu".to_string(),
+                value: Value::Object(Token::None),
+                args: HashMap::from([("age".to_string(), Value::Single(Token::Integer(17)))]),
+            }],
         );
     }
 
     #[test]
     fn parses_value() {
-        let input = vec![
-            Token::Identifier("age".to_string()),
-            Token::Keyword("is".to_string()),
-            Token::Integer(17),
-        ];
-
-        assert_eq!(
-            parse(input),
-            vec![Data {
-                identifier: Identifier::Value("age".to_string()),
-                value: Token::Integer(17),
-                parameters: vec![],
-            }]
+        expect(
+            [
+                Token::Identifier("age".to_string()),
+                Token::Keyword("is".to_string()),
+                Token::Integer(17),
+            ],
+            [Data {
+                id: "age".to_string(),
+                value: Value::Single(Token::Integer(17)),
+                args: HashMap::new(),
+            }],
         );
     }
 }
