@@ -1,13 +1,18 @@
-#[derive(Debug, PartialEq)]
+use core::panic;
+
+#[derive(Debug, PartialEq, Clone)]
 enum Token {
     Preposition(String),
+    Posesive(String),
     Identifier(String),
     Keyword(String),
     Integer(i32),
     Float(f32),
 }
 
-const PREPOSITIONS: [&str; 4] = ["the", "a", "an", "is"];
+const PREPOSITIONS: [&str; 3] = ["the", "a", "an"];
+const BUILT_IN_KEYWORDS: [&str; 1] = ["is"];
+const POSESIVES: [&str; 2] = ["s", "of"];
 
 #[allow(dead_code)]
 fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
@@ -24,10 +29,14 @@ fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
                 let condition = |c: &char| c.is_alphanumeric() || *c == '_';
                 let word = String::from_iter(chars.by_ref().take_while(condition));
 
-                if keywords.contains(&word.as_str()) {
-                    Token::Keyword(word)
-                } else if PREPOSITIONS.contains(&word.as_str()) {
+                if PREPOSITIONS.contains(&word.as_str()) {
                     Token::Preposition(word)
+                } else if keywords.contains(&word.as_str())
+                    || BUILT_IN_KEYWORDS.contains(&word.as_str())
+                {
+                    Token::Keyword(word)
+                } else if POSESIVES.contains(&word.as_str()) {
+                    Token::Posesive(word)
                 } else {
                     Token::Identifier(word)
                 }
@@ -41,7 +50,7 @@ fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
                     Token::Integer(number.parse().unwrap())
                 }
             }
-            _ => break,
+            _ => panic!("Unexpected character: {c}"),
         };
         tokens.push(token);
     }
@@ -49,25 +58,48 @@ fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
     return tokens;
 }
 
+#[derive(Debug, PartialEq)]
+enum Identifier {
+    Object(String),
+    Value(String),
+    Event(String),
+}
+
+#[derive(Debug, PartialEq)]
+struct Data {
+    identifier: Identifier,
+    value: Token,
+    parameters: Vec<Token>,
+}
+
+#[allow(dead_code)]
+fn parse(tokens: Vec<Token>) -> Vec<Data> {
+    let mut data = vec![];
+    let mut tok = tokens
+        .iter()
+        .filter(|t| !matches!(t, Token::Preposition(_)));
+    while let (Some(a), Some(b), Some(c)) = (tok.next(), tok.next(), tok.next()) {
+        let parse_result = match (a, b, c) {
+            (Token::Identifier(a), Token::Keyword(_), Token::Keyword(c)) => Data {
+                identifier: Identifier::Object(a.to_string()),
+                value: Token::Keyword(c.to_string()),
+                parameters: vec![],
+            },
+            (Token::Identifier(a), Token::Keyword(_), c) => Data {
+                identifier: Identifier::Value(a.to_string()),
+                value: c.clone(),
+                parameters: vec![],
+            },
+            _ => panic!("Unexpected token: {a:?} {b:?} {c:?}"),
+        };
+        data.push(parse_result);
+    }
+    return data;
+}
+
 #[cfg(test)]
 mod test_tokenizer {
     use crate::{tokenize, Token};
-
-    struct ABC {
-        a: String,
-        b: bool,
-        c: i32,
-    }
-
-    impl Default for ABC {
-        fn default() -> Self {
-            Self {
-                a: "A".to_string(),
-                b: true,
-                c: 0,
-            }
-        }
-    }
 
     const KEYWORDS: [&str; 2] = ["reimu", "marisa"];
 
@@ -131,9 +163,67 @@ mod test_tokenizer {
             [
                 Token::Keyword("reimu".to_string()),
                 Token::Identifier("age".to_string()),
-                Token::Preposition("is".to_string()),
+                Token::Keyword("is".to_string()),
                 Token::Integer(17),
             ],
+        );
+    }
+
+    #[test]
+    fn recognizes_posesives() {
+        expect(
+            "mcdonald's",
+            [
+                Token::Identifier("mcdonald".to_string()),
+                Token::Posesive("s".to_string()),
+            ],
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_parser {
+    use crate::{parse, Data, Identifier, Token};
+
+    #[test]
+    fn no_tokens_is_empty() {
+        assert_eq!(parse(vec![]), vec![]);
+    }
+
+    #[test]
+    fn parses_object() {
+        let input = vec![
+            Token::Identifier("reimu".to_string()),
+            Token::Keyword("is".to_string()),
+            Token::Preposition("the".to_string()),
+            Token::Keyword("player".to_string()),
+        ];
+
+        assert_eq!(
+            parse(input),
+            vec![Data {
+                identifier: Identifier::Object("reimu".to_string()),
+                value: Token::Keyword("player".to_string()),
+                parameters: vec![],
+            }]
+        );
+    }
+
+    #[test]
+    fn parses_value() {
+        let input = vec![
+            Token::Identifier("age".to_string()),
+            Token::Keyword("is".to_string()),
+            Token::Integer(17),
+        ];
+
+        assert_eq!(
+            parse(input),
+            vec![Data {
+                identifier: Identifier::Value("age".to_string()),
+                value: Token::Integer(17),
+                parameters: vec![],
+            }]
         );
     }
 }
