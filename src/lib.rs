@@ -1,23 +1,43 @@
-use core::panic;
-use std::collections::HashMap;
-
 #[derive(Debug, PartialEq, Clone)]
 enum Token {
     Preposition(String),
     Possesive(String),
     Identifier(String),
     Keyword(String),
-    Integer(i32),
-    Float(f32),
+    Number(f32),
     None,
 }
 
-const PREPOSITIONS: [&str; 3] = ["the", "a", "an"];
-const BUILT_IN_KEYWORDS: [&str; 1] = ["is"];
-const POSESIVES: [&str; 2] = ["s", "of"];
+#[macro_export]
+macro_rules! token_macro {
+    ($id: ident, Number) => {
+        macro_rules! $id {
+            ($name: literal) => {
+                Token::Number($name)
+            };
+        }
+    };
+    ($id: ident, $token: ident) => {
+        macro_rules! $id {
+            ($name: literal) => {
+                Token::$token($name.to_string())
+            };
+        }
+    };
+}
+
+const PREPOSITIONS: [&str; 4] = ["the", "a", "an", "and"];
+const KEYWORDS: [&str; 1] = ["is"];
+const POSSESIVES: [&str; 2] = ["s", "of"];
+
+macro_rules! contains {
+    ($list: ident, $word: ident) => {
+        $list.contains(&$word.as_str())
+    };
+}
 
 #[allow(dead_code)]
-fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
+fn tokenize(text: &str) -> Vec<Token> {
     let mut tokens = vec![];
     let mut chars = text
         .trim()
@@ -31,13 +51,11 @@ fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
                 let condition = |c: &char| c.is_alphanumeric() || *c == '_';
                 let word = String::from_iter(chars.by_ref().take_while(condition));
 
-                if PREPOSITIONS.contains(&word.as_str()) {
+                if contains!(PREPOSITIONS, word) {
                     Token::Preposition(word)
-                } else if keywords.contains(&word.as_str())
-                    || BUILT_IN_KEYWORDS.contains(&word.as_str())
-                {
+                } else if contains!(KEYWORDS, word) {
                     Token::Keyword(word)
-                } else if POSESIVES.contains(&word.as_str()) {
+                } else if contains!(POSSESIVES, word) {
                     Token::Possesive(word)
                 } else {
                     Token::Identifier(word)
@@ -46,92 +64,32 @@ fn tokenize(text: &str, keywords: &[&str]) -> Vec<Token> {
             '0'..='9' => {
                 let condition = |c: &char| c.is_digit(10) || *c == '.';
                 let number = String::from_iter(chars.by_ref().take_while(condition));
-                if number.contains('.') {
-                    Token::Float(number.parse().unwrap())
-                } else {
-                    Token::Integer(number.parse().unwrap())
-                }
+                Token::Number(number.parse().expect("Correct number format"))
             }
-            _ => panic!("Unexpected character: {c}"),
+            ' ' | ',' => {
+                chars.next();
+                Token::None
+            }
+            _ => panic!("Unexpected character: ->{c}<-"),
         };
         tokens.push(token);
     }
 
-    return tokens;
-}
-
-#[derive(Debug, PartialEq)]
-enum Value {
-    Object(Token),
-    Single(Token),
-}
-
-#[derive(Debug, PartialEq)]
-struct Data {
-    id: String,
-    value: Value,
-    args: HashMap<String, Value>,
-}
-
-#[allow(dead_code)]
-fn parse(tokens: Vec<Token>) -> Vec<Data> {
-    let mut data = vec![];
-    let mut tok = tokens
-        .iter()
-        .filter(|t| !matches!(t, Token::Preposition(_)));
-    while let (Some(a), Some(b), Some(c)) = (tok.next(), tok.next(), tok.next()) {
-        let parse_result = match (a, b, c) {
-            (Token::Identifier(a), Token::Keyword(_), Token::Keyword(c)) => Data {
-                id: a.to_string(),
-                value: Value::Object(Token::Keyword(c.to_string())),
-                args: HashMap::new(),
-            },
-            (Token::Identifier(a), Token::Keyword(_), c) => Data {
-                id: a.to_string(),
-                value: Value::Single(c.clone()),
-                args: HashMap::new(),
-            },
-            (Token::Identifier(a), Token::Possesive(b), Token::Identifier(c)) if b == "s" => {
-                match (
-                    tok.next().unwrap_or(&Token::None),
-                    tok.next().unwrap_or(&Token::None),
-                ) {
-                    (Token::Keyword(_), value) => Data {
-                        id: a.to_string(),
-                        value: Value::Object(Token::None),
-                        args: HashMap::from([(c.to_string(), Value::Single(value.clone()))]),
-                    },
-                    (a, b) => panic!("Unexpected token: {a:?} {b:?}"),
-                }
-            }
-            (Token::Identifier(a), Token::Possesive(b), Token::Identifier(c)) if b == "of" => {
-                match (
-                    tok.next().unwrap_or(&Token::None),
-                    tok.next().unwrap_or(&Token::None),
-                ) {
-                    (Token::Keyword(_), value) => Data {
-                        id: c.to_string(),
-                        value: Value::Object(Token::None),
-                        args: HashMap::from([(a.to_string(), Value::Single(value.clone()))]),
-                    },
-                    (a, b) => panic!("Unexpected token: {a:?} {b:?}"),
-                }
-            }
-            (a, b, c) => panic!("Unexpected token: {a:?} {b:?} {c:?}"),
-        };
-        data.push(parse_result);
-    }
-    return data;
+    return tokens.into_iter().filter(|t| *t != Token::None).collect();
 }
 
 #[cfg(test)]
 mod test_tokenizer {
     use crate::{tokenize, Token};
 
-    const KEYWORDS: [&str; 2] = ["reimu", "marisa"];
+    token_macro!(ident, Identifier);
+    token_macro!(num, Number);
+    token_macro!(kword, Keyword);
+    token_macro!(poss, Possesive);
+    token_macro!(prep, Preposition);
 
     fn expect<const N: usize>(text: &str, tokens: [Token; N]) {
-        assert_eq!(tokenize(text, &KEYWORDS), tokens);
+        assert_eq!(tokenize(text), tokens);
     }
 
     #[test]
@@ -141,149 +99,243 @@ mod test_tokenizer {
 
     #[test]
     fn recognizes_identifiers() {
-        expect("abc", [Token::Identifier("abc".to_string())]);
+        expect("abc", [ident!("abc")]);
     }
 
     #[test]
     fn ignores_whitespace() {
-        expect("    abc    ", [Token::Identifier("abc".to_string())]);
+        expect("    abc    ", [ident!("abc")]);
     }
 
     #[test]
     fn recognizes_numbers() {
-        expect("123", [Token::Integer(123)]);
-        expect("1.23", [Token::Float(1.23)]);
+        expect("123", [num!(123.0)]);
+        expect("1.23", [num!(1.23)]);
     }
 
     #[test]
     fn recognizes_keywords() {
-        expect(
-            "reimu marisa",
-            [
-                Token::Keyword("reimu".to_string()),
-                Token::Keyword("marisa".to_string()),
-            ],
-        );
+        expect("is marisa", [kword!("is"), ident!("marisa")]);
     }
 
     #[test]
     fn recognizes_prepositions() {
-        expect(
-            "the a an",
-            [
-                Token::Preposition("the".to_string()),
-                Token::Preposition("a".to_string()),
-                Token::Preposition("an".to_string()),
-            ],
-        );
+        expect("the a an", [prep!("the"), prep!("a"), prep!("an")]);
     }
 
     #[test]
     fn multiple_tokens() {
-        expect(
-            "abc 123",
-            [Token::Identifier("abc".to_string()), Token::Integer(123)],
-        );
+        expect("abc 123", [ident!("abc"), num!(123.0)]);
 
         expect(
             "reimu age is 17",
-            [
-                Token::Keyword("reimu".to_string()),
-                Token::Identifier("age".to_string()),
-                Token::Keyword("is".to_string()),
-                Token::Integer(17),
-            ],
+            [ident!("reimu"), ident!("age"), kword!("is"), num!(17.0)],
         );
     }
 
     #[test]
     fn recognizes_posesives() {
-        expect(
-            "mcdonald's",
-            [
-                Token::Identifier("mcdonald".to_string()),
-                Token::Possesive("s".to_string()),
-            ],
-        );
+        expect("mcdonald's", [ident!("mcdonald"), poss!("s")]);
     }
+
+    #[test]
+    fn recognizes_multiple_phrases() {
+        expect(
+            "reimu's age is 17, and marisa's age is 18",
+            [
+                ident!("reimu"),
+                poss!("s"),
+                ident!("age"),
+                kword!("is"),
+                num!(17.0),
+                prep!("and"),
+                ident!("marisa"),
+                poss!("s"),
+                ident!("age"),
+                kword!("is"),
+                num!(18.0),
+            ],
+        )
+    }
+}
+
+macro_rules! find {
+    ($list: ident, $name: ident) => {
+        $list
+            .iter()
+            .find(|o| o.id == *$name)
+            .expect("Found object")
+            .value
+    };
+}
+
+#[derive(Debug, PartialEq, Clone)]
+enum Value {
+    Number(f32),
+    String(String),
+    List(Vec<Object>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+struct Object {
+    id: String,
+    value: Value,
+}
+
+#[allow(dead_code)]
+fn parse(tokens: Vec<Token>) -> Vec<Object> {
+    let mut tokens = tokens.iter();
+    let mut objects = vec![];
+
+    while let (Some(a), Some(b), Some(c)) = (tokens.next(), tokens.next(), tokens.next()) {
+        match (a, b, c) {
+            (Token::Identifier(name), Token::Keyword(k), Token::Number(value)) if k == "is" => {
+                objects.push(Object {
+                    id: name.to_string(),
+                    value: Value::Number(*value as f32),
+                })
+            }
+            (Token::Identifier(name), Token::Keyword(k), Token::Identifier(value)) if k == "is" => {
+                objects.push(Object {
+                    id: name.to_string(),
+                    value: find!(objects, value).clone(),
+                })
+            }
+            (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
+                if k == "s" =>
+            {
+                match (tokens.next().unwrap(), tokens.next().unwrap()) {
+                    (Token::Keyword(k), Token::Number(value)) if k == "is" => {
+                        objects.push(Object {
+                            id: name.to_string(),
+                            value: Value::List(vec![Object {
+                                id: property.to_string(),
+                                value: Value::Number(*value as f32),
+                            }]),
+                        })
+                    }
+                    (Token::Keyword(k), Token::Identifier(variable)) if k == "is" => {
+                        objects.push(Object {
+                            id: name.to_string(),
+                            value: Value::List(vec![Object {
+                                id: property.to_string(),
+                                value: find!(objects, variable).clone(),
+                            }]),
+                        })
+                    }
+                    (d, e) => panic!("Unexpected tokens: ->{:?}<-", [a, b, c, d, e]),
+                }
+            }
+            _ => panic!("Unexpected tokens: ->{:?}<-", [a, b, c]),
+        }
+    }
+
+    objects
 }
 
 #[cfg(test)]
 mod test_parser {
-    use std::collections::HashMap;
+    use crate::{parse, Object, Token, Value};
 
-    use crate::{parse, Data, Token, Value};
+    token_macro!(ident, Identifier);
+    token_macro!(num, Number);
+    token_macro!(kword, Keyword);
+    token_macro!(poss, Possesive);
 
-    fn expect<const N: usize, const M: usize>(input: [Token; N], output: [Data; M]) {
-        assert_eq!(parse(input.to_vec()), output);
+    macro_rules! list {
+        ($($item: expr),*) => {
+            Value::List(vec![$($item),*])
+        };
+    }
+
+    macro_rules! obj {
+        ($id: literal, $value: expr) => {
+            Object {
+                id: $id.to_string(),
+                value: $value,
+            }
+        };
+    }
+
+    fn expect<const N: usize, const M: usize>(tokens: [Token; N], objects: [Object; M]) {
+        assert_eq!(parse(tokens.to_vec()), objects);
     }
 
     #[test]
-    fn no_tokens_is_empty() {
-        expect([], []);
-    }
-
-    #[test]
-    fn parses_object() {
+    fn parse_single_value() {
         expect(
-            [
-                Token::Identifier("reimu".to_string()),
-                Token::Keyword("is".to_string()),
-                Token::Preposition("the".to_string()),
-                Token::Keyword("player".to_string()),
-            ],
-            [Data {
-                id: "reimu".to_string(),
-                value: Value::Object(Token::Keyword("player".to_string())),
-                args: HashMap::new(),
-            }],
-        );
-
-        expect(
-            [
-                Token::Identifier("reimu".to_string()),
-                Token::Possesive("s".to_string()),
-                Token::Identifier("age".to_string()),
-                Token::Keyword("is".to_string()),
-                Token::Integer(17),
-            ],
-            [Data {
-                id: "reimu".to_string(),
-                value: Value::Object(Token::None),
-                args: HashMap::from([("age".to_string(), Value::Single(Token::Integer(17)))]),
-            }],
-        );
-
-        expect(
-            [
-                Token::Preposition("the".to_string()),
-                Token::Identifier("age".to_string()),
-                Token::Possesive("of".to_string()),
-                Token::Identifier("reimu".to_string()),
-                Token::Keyword("is".to_string()),
-                Token::Integer(17),
-            ],
-            [Data {
-                id: "reimu".to_string(),
-                value: Value::Object(Token::None),
-                args: HashMap::from([("age".to_string(), Value::Single(Token::Integer(17)))]),
-            }],
+            [ident!("age"), kword!("is"), num!(17.0)],
+            [obj!("age", Value::Number(17.0))],
         );
     }
 
     #[test]
-    fn parses_value() {
+    fn parse_multiple_values() {
         expect(
             [
-                Token::Identifier("age".to_string()),
-                Token::Keyword("is".to_string()),
-                Token::Integer(17),
+                ident!("age"),
+                kword!("is"),
+                num!(17.0),
+                ident!("marisa"),
+                kword!("is"),
+                num!(18.0),
             ],
-            [Data {
-                id: "age".to_string(),
-                value: Value::Single(Token::Integer(17)),
-                args: HashMap::new(),
-            }],
+            [
+                obj!("age", Value::Number(17.0)),
+                obj!("marisa", Value::Number(18.0)),
+            ],
+        );
+    }
+
+    #[test]
+    fn parse_variable() {
+        expect(
+            [
+                ident!("age"),
+                kword!("is"),
+                num!(17.0),
+                ident!("marisa"),
+                kword!("is"),
+                ident!("age"),
+            ],
+            [
+                obj!("age", Value::Number(17.0)),
+                obj!("marisa", Value::Number(17.0)),
+            ],
+        );
+    }
+
+    #[test]
+    fn parse_posessive_s() {
+        expect(
+            [
+                ident!("marisa"),
+                poss!("s"),
+                ident!("age"),
+                kword!("is"),
+                num!(18.0),
+            ],
+            [obj!("marisa", list![obj!("age", Value::Number(18.0))])],
+        );
+    }
+
+    #[test]
+    fn parse_posessive_variable() {
+        expect(
+            [
+                ident!("age"),
+                kword!("is"),
+                num!(17.0),
+                ident!("marisa"),
+                poss!("s"),
+                ident!("age"),
+                kword!("is"),
+                ident!("age"),
+            ],
+            [
+                obj!("age", Value::Number(17.0)),
+                obj!("marisa", list![obj!("age", Value::Number(17.0))]),
+            ],
         );
     }
 }
