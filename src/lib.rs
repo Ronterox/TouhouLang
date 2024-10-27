@@ -148,7 +148,9 @@ mod test_tokenizer {
                 ident!("age"),
                 kword!("is"),
                 num!(17.0),
+                //
                 prep!("and"),
+                //
                 ident!("marisa"),
                 poss!("s"),
                 ident!("age"),
@@ -159,13 +161,21 @@ mod test_tokenizer {
     }
 }
 
-macro_rules! find {
+macro_rules! find_mut_obj {
     ($list: ident, $name: ident) => {
-        $list
-            .iter()
-            .find(|o| o.id == *$name)
-            .expect("Found object")
-            .value
+        $list.iter_mut().find(|o| o.id == *$name)
+    };
+}
+
+macro_rules! find_obj {
+    ($list: ident, $name: ident) => {
+        $list.iter().find(|o| o.id == *$name)
+    };
+}
+
+macro_rules! find_value {
+    ($list: ident, $name: ident) => {
+        find_obj!($list, $name).expect("Found object").value
     };
 }
 
@@ -185,43 +195,86 @@ struct Object {
 #[allow(dead_code)]
 fn parse(tokens: Vec<Token>) -> Vec<Object> {
     let mut tokens = tokens.iter();
-    let mut objects = vec![];
+    let mut objects = Vec::<Object>::new();
 
     while let (Some(a), Some(b), Some(c)) = (tokens.next(), tokens.next(), tokens.next()) {
         match (a, b, c) {
+            // ident! kword! num!
             (Token::Identifier(name), Token::Keyword(k), Token::Number(value)) if k == "is" => {
-                objects.push(Object {
-                    id: name.to_string(),
-                    value: Value::Number(*value as f32),
-                })
+                let value = Value::Number(*value);
+
+                if let Some(obj) = find_mut_obj!(objects, name) {
+                    obj.value = value;
+                } else {
+                    objects.push(Object {
+                        id: name.to_string(),
+                        value,
+                    });
+                }
             }
-            (Token::Identifier(name), Token::Keyword(k), Token::Identifier(value)) if k == "is" => {
-                objects.push(Object {
-                    id: name.to_string(),
-                    value: find!(objects, value).clone(),
-                })
+            // ident! kword! ident!
+            (Token::Identifier(name), Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
+                let value = find_value!(objects, var).clone();
+
+                if let Some(obj) = find_mut_obj!(objects, name) {
+                    obj.value = value;
+                } else {
+                    objects.push(Object {
+                        id: name.to_string(),
+                        value,
+                    });
+                }
             }
+            // ident! poss! ident!
             (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
                 if k == "s" =>
             {
                 match (tokens.next().unwrap(), tokens.next().unwrap()) {
                     (Token::Keyword(k), Token::Number(value)) if k == "is" => {
-                        objects.push(Object {
-                            id: name.to_string(),
-                            value: Value::List(vec![Object {
-                                id: property.to_string(),
-                                value: Value::Number(*value as f32),
-                            }]),
-                        })
+                        let value = Value::Number(*value);
+
+                        match find_mut_obj!(objects, name) {
+                            Some(obj) => match &mut obj.value {
+                                Value::List(list) => match find_mut_obj!(list, property) {
+                                    Some(obj) => obj.value = value,
+                                    None => list.push(Object {
+                                        id: property.to_string(),
+                                        value,
+                                    }),
+                                },
+                                _ => panic!("Expected {name} to be a list"),
+                            },
+                            None => objects.push(Object {
+                                id: name.to_string(),
+                                value: Value::List(vec![Object {
+                                    id: property.to_string(),
+                                    value,
+                                }]),
+                            }),
+                        }
                     }
-                    (Token::Keyword(k), Token::Identifier(variable)) if k == "is" => {
-                        objects.push(Object {
-                            id: name.to_string(),
-                            value: Value::List(vec![Object {
-                                id: property.to_string(),
-                                value: find!(objects, variable).clone(),
-                            }]),
-                        })
+                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
+                        let value = find_value!(objects, var).clone();
+
+                        match find_mut_obj!(objects, name) {
+                            Some(obj) => match &mut obj.value {
+                                Value::List(list) => match find_mut_obj!(list, property) {
+                                    Some(obj) => obj.value = value,
+                                    None => list.push(Object {
+                                        id: property.to_string(),
+                                        value,
+                                    }),
+                                },
+                                _ => panic!("Expected {name} to be a list"),
+                            },
+                            None => objects.push(Object {
+                                id: name.to_string(),
+                                value: Value::List(vec![Object {
+                                    id: property.to_string(),
+                                    value,
+                                }]),
+                            }),
+                        }
                     }
                     (d, e) => panic!("Unexpected tokens: ->{:?}<-", [a, b, c, d, e]),
                 }
@@ -276,6 +329,7 @@ mod test_parser {
                 ident!("age"),
                 kword!("is"),
                 num!(17.0),
+                //
                 ident!("marisa"),
                 kword!("is"),
                 num!(18.0),
@@ -294,6 +348,7 @@ mod test_parser {
                 ident!("age"),
                 kword!("is"),
                 num!(17.0),
+                //
                 ident!("marisa"),
                 kword!("is"),
                 ident!("age"),
@@ -306,7 +361,43 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_posessive_s() {
+    fn parse_update_variable() {
+        expect(
+            [
+                ident!("age"),
+                kword!("is"),
+                num!(17.0),
+                //
+                ident!("age"),
+                kword!("is"),
+                num!(18.0),
+            ],
+            [obj!("age", Value::Number(18.0))],
+        );
+
+        expect(
+            [
+                ident!("age"),
+                kword!("is"),
+                num!(18.0),
+                //
+                ident!("marisa"),
+                kword!("is"),
+                num!(17.0),
+                //
+                ident!("marisa"),
+                kword!("is"),
+                ident!("age"),
+            ],
+            [
+                obj!("age", Value::Number(18.0)),
+                obj!("marisa", Value::Number(18.0)),
+            ],
+        );
+    }
+
+    #[test]
+    fn parse_attribute() {
         expect(
             [
                 ident!("marisa"),
@@ -320,12 +411,13 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_posessive_variable() {
+    fn parse_attribute_variable() {
         expect(
             [
                 ident!("age"),
                 kword!("is"),
                 num!(17.0),
+                //
                 ident!("marisa"),
                 poss!("s"),
                 ident!("age"),
@@ -335,6 +427,50 @@ mod test_parser {
             [
                 obj!("age", Value::Number(17.0)),
                 obj!("marisa", list![obj!("age", Value::Number(17.0))]),
+            ],
+        );
+    }
+
+    #[test]
+    fn parse_update_attribute() {
+        expect(
+            [
+                ident!("marisa"),
+                poss!("s"),
+                ident!("age"),
+                kword!("is"),
+                num!(17.0),
+                //
+                ident!("marisa"),
+                poss!("s"),
+                ident!("age"),
+                kword!("is"),
+                num!(18.0),
+            ],
+            [obj!("marisa", list![obj!("age", Value::Number(18.0))])],
+        );
+
+        expect(
+            [
+                ident!("age"),
+                kword!("is"),
+                num!(18.0),
+                //
+                ident!("marisa"),
+                poss!("s"),
+                ident!("age"),
+                kword!("is"),
+                num!(17.0),
+                //
+                ident!("marisa"),
+                poss!("s"),
+                ident!("age"),
+                kword!("is"),
+                ident!("age"),
+            ],
+            [
+                obj!("age", Value::Number(18.0)),
+                obj!("marisa", list![obj!("age", Value::Number(18.0))]),
             ],
         );
     }
