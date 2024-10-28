@@ -509,3 +509,41 @@ mod test_parser {
         );
     }
 }
+
+#[macro_export]
+macro_rules! evaluate {
+    ($objs: ident, $struct: ident) => {{
+        let name = std::any::type_name::<$struct>();
+        if name.ends_with("::Globals") {
+            $struct::default()
+        } else {
+            $struct::default()
+        }
+    }};
+}
+
+#[cfg(test)]
+mod evaluate_test {
+    use crate::{Object, Value};
+
+    macro_rules! obj {
+        ($id: literal, $value: expr) => {
+            Object {
+                id: $id.to_string(),
+                value: $value,
+            }
+        };
+    }
+
+    #[derive(Default)]
+    struct Globals {
+        text: String,
+    }
+
+    #[test]
+    fn evaluates_string() {
+        let _objs = vec![obj!("text", Value::String("hi mom!".to_string()))];
+        let res = evaluate!(objs, Globals);
+        assert_eq!(res.text, "hi mom!");
+    }
+}
