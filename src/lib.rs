@@ -1,5 +1,6 @@
 #[derive(Debug, PartialEq, Clone)]
 enum Token {
+    String(String),
     Preposition(String),
     Possesive(String),
     Identifier(String),
@@ -66,6 +67,11 @@ fn tokenize(text: &str) -> Vec<Token> {
                 let number = String::from_iter(chars.by_ref().take_while(condition));
                 Token::Number(number.parse().expect("Correct number format"))
             }
+            '"' => {
+                chars.next();
+                let string = String::from_iter(chars.by_ref().take_while(|c| *c != '"'));
+                Token::String(string)
+            }
             ' ' | ',' => {
                 chars.next();
                 Token::None
@@ -87,6 +93,7 @@ mod test_tokenizer {
     token_macro!(kword, Keyword);
     token_macro!(poss, Possesive);
     token_macro!(prep, Preposition);
+    token_macro!(str, String);
 
     fn expect<const N: usize>(text: &str, tokens: [Token; N]) {
         assert_eq!(tokenize(text), tokens);
@@ -105,6 +112,11 @@ mod test_tokenizer {
     #[test]
     fn ignores_whitespace() {
         expect("    abc    ", [ident!("abc")]);
+    }
+
+    #[test]
+    fn recognizes_string() {
+        expect(r#""marisa""#, [str!("marisa")]);
     }
 
     #[test]
@@ -212,6 +224,19 @@ fn parse(tokens: Vec<Token>) -> Vec<Object> {
                     });
                 }
             }
+            // ident! kword! str!
+            (Token::Identifier(name), Token::Keyword(k), Token::String(value)) if k == "is" => {
+                let value = Value::String(value.to_string());
+
+                if let Some(obj) = find_mut_obj!(objects, name) {
+                    obj.value = value;
+                } else {
+                    objects.push(Object {
+                        id: name.to_string(),
+                        value,
+                    });
+                }
+            }
             // ident! kword! ident!
             (Token::Identifier(name), Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
                 let value = find_value!(objects, var).clone();
@@ -242,7 +267,7 @@ fn parse(tokens: Vec<Token>) -> Vec<Object> {
                                         value,
                                     }),
                                 },
-                                _ => panic!("Expected {name} to be a list"),
+                                _ => panic!("Expected {name} to be a list of args"),
                             },
                             None => objects.push(Object {
                                 id: name.to_string(),
@@ -265,7 +290,7 @@ fn parse(tokens: Vec<Token>) -> Vec<Object> {
                                         value,
                                     }),
                                 },
-                                _ => panic!("Expected {name} to be a list"),
+                                _ => panic!("Expected {name} to be a list of args"),
                             },
                             None => objects.push(Object {
                                 id: name.to_string(),
@@ -276,10 +301,10 @@ fn parse(tokens: Vec<Token>) -> Vec<Object> {
                             }),
                         }
                     }
-                    (d, e) => panic!("Unexpected tokens: ->{:?}<-", [a, b, c, d, e]),
+                    (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
                 }
             }
-            _ => panic!("Unexpected tokens: ->{:?}<-", [a, b, c]),
+            _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
         }
     }
 
@@ -294,6 +319,7 @@ mod test_parser {
     token_macro!(num, Number);
     token_macro!(kword, Keyword);
     token_macro!(poss, Possesive);
+    token_macro!(str, String);
 
     macro_rules! list {
         ($($item: expr),*) => {
@@ -315,7 +341,7 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_single_value() {
+    fn parses_single_value() {
         expect(
             [ident!("age"), kword!("is"), num!(17.0)],
             [obj!("age", Value::Number(17.0))],
@@ -323,7 +349,15 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_multiple_values() {
+    fn parses_string() {
+        expect(
+            [ident!("marisa"), kword!("is"), str!("marisa")],
+            [obj!("marisa", Value::String("marisa".to_string()))],
+        );
+    }
+
+    #[test]
+    fn parses_multiple_values() {
         expect(
             [
                 ident!("age"),
@@ -342,7 +376,7 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_variable() {
+    fn parses_variable() {
         expect(
             [
                 ident!("age"),
@@ -361,7 +395,7 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_update_variable() {
+    fn updates_by_variable() {
         expect(
             [
                 ident!("age"),
@@ -397,7 +431,7 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_attribute() {
+    fn parses_attribute() {
         expect(
             [
                 ident!("marisa"),
@@ -411,7 +445,7 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_attribute_variable() {
+    fn parses_attribute_variable() {
         expect(
             [
                 ident!("age"),
@@ -432,7 +466,7 @@ mod test_parser {
     }
 
     #[test]
-    fn parse_update_attribute() {
+    fn updates_attribute() {
         expect(
             [
                 ident!("marisa"),
