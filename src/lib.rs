@@ -81,7 +81,13 @@ fn tokenize(text: &str) -> Vec<Token> {
         tokens.push(token);
     }
 
-    return tokens.into_iter().filter(|t| *t != Token::None).collect();
+    return tokens
+        .into_iter()
+        .filter(|t| match t {
+            Token::None | Token::Preposition(_) => false,
+            _ => true,
+        })
+        .collect();
 }
 
 #[cfg(test)]
@@ -92,7 +98,6 @@ mod test_tokenizer {
     token_macro!(num, Number);
     token_macro!(kword, Keyword);
     token_macro!(poss, Possesive);
-    token_macro!(prep, Preposition);
     token_macro!(str, String);
 
     fn expect<const N: usize>(text: &str, tokens: [Token; N]) {
@@ -131,8 +136,8 @@ mod test_tokenizer {
     }
 
     #[test]
-    fn recognizes_prepositions() {
-        expect("the a an", [prep!("the"), prep!("a"), prep!("an")]);
+    fn excludes_prepositions() {
+        expect("the a an", []);
     }
 
     #[test]
@@ -160,8 +165,6 @@ mod test_tokenizer {
                 ident!("age"),
                 kword!("is"),
                 num!(17.0),
-                //
-                prep!("and"),
                 //
                 ident!("marisa"),
                 poss!("s"),
@@ -585,12 +588,19 @@ macro_rules! evaluator {
         impl_evaluate!(struct $name {
             $($field_name: $field_type,)*
         });
+
+        impl $name {
+            #[allow(dead_code)]
+            fn evaluate_text(&mut self, text: &str) {
+                self.evaluate(parse(tokenize(text)));
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod test_evaluate {
-    use crate::{Object, Value};
+    use crate::{parse, tokenize, Object, Value};
 
     macro_rules! list { ($($item: expr),*) => { Value::List(vec![$($item),*]) }; }
 
@@ -642,5 +652,51 @@ mod test_evaluate {
         res.evaluate(objs);
 
         assert_eq!(res.age, 17);
+    }
+}
+
+#[cfg(test)]
+mod test_integration {
+    use crate::{parse, tokenize, Object, Value};
+
+    evaluator! {
+        struct Globals {
+            age: i32,
+        }
+    }
+
+    evaluator! {
+        struct Reimu {
+            age: i32,
+            item: String,
+        }
+    }
+
+    evaluator! {
+        struct Marisa {
+            age: i32,
+        }
+    }
+
+    #[test]
+    fn integrates_from_start_to_finish() {
+        let input = r#"age is 17, item is "Minecraft", and reimu's age is age, and marisa's age is 18, reimu's item is item"#;
+
+        let mut globals = Globals { age: 0 };
+        globals.evaluate_text(input);
+
+        let mut reimu = Reimu {
+            age: 0,
+            item: String::new(),
+        };
+        reimu.evaluate_text(input);
+
+        let mut marisa = Marisa { age: 0 };
+        marisa.evaluate_text(input);
+
+        assert_eq!(globals.age, 17);
+        assert_eq!(reimu.age, 17);
+        assert_eq!(reimu.item, "Minecraft");
+        assert_eq!(marisa.age, 18);
     }
 }
