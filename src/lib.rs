@@ -511,19 +511,56 @@ mod test_parser {
 }
 
 #[macro_export]
-macro_rules! evaluate {
-    ($objs: ident, $struct: ident) => {{
-        let name = std::any::type_name::<$struct>();
-        if name.ends_with("::Globals") {
-            $struct::default()
-        } else {
-            $struct::default()
+macro_rules! parse_value {
+    ($value: expr, String) => {
+        match $value {
+            Value::String(s) => s,
+            Value::Number(n) => n.to_string(),
+            _ => panic!("Expected string or number"),
         }
-    }};
+    };
+    ($value: expr, i32) => {
+        match $value {
+            Value::String(s) => s.parse().unwrap(),
+            Value::Number(n) => n as i32,
+            _ => panic!("Expected string or number"),
+        }
+    };
+    ($value: expr, f32) => {
+        match $value {
+            Value::String(s) => s.parse().unwrap(),
+            Value::Number(n) => n,
+            _ => panic!("Expected string or number"),
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! evaluator {
+    (struct $name:ident {
+        $($field_name:ident: $field_type:tt,)*
+    }) => {
+        struct $name {
+            $($field_name: $field_type,)*
+        }
+
+        impl $name {
+            pub fn evaluate(&mut self, objs: Vec<Object>) {
+                for obj in objs {
+                    match obj.id.as_str() {
+                        $(stringify!($field_name) => {
+                            self.$field_name = parse_value!(obj.value, $field_type);
+                        })*
+                        _ => {},
+                    }
+                }
+            }
+        }
+    };
 }
 
 #[cfg(test)]
-mod evaluate_test {
+mod test_evaluate {
     use crate::{Object, Value};
 
     macro_rules! obj {
@@ -535,15 +572,24 @@ mod evaluate_test {
         };
     }
 
-    #[derive(Default)]
-    struct Globals {
-        text: String,
+    evaluator! {
+        struct Globals {
+            text: String,
+            number: i32,
+        }
     }
 
     #[test]
     fn evaluates_string() {
-        let _objs = vec![obj!("text", Value::String("hi mom!".to_string()))];
-        let res = evaluate!(objs, Globals);
+        let objs = vec![obj!("text", Value::String("hi mom!".to_string()))];
+
+        let mut res = Globals {
+            text: String::new(),
+            number: 0,
+        };
+
+        res.evaluate(objs);
+
         assert_eq!(res.text, "hi mom!");
     }
 }
