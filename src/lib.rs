@@ -321,11 +321,7 @@ mod test_parser {
     token_macro!(poss, Possesive);
     token_macro!(str, String);
 
-    macro_rules! list {
-        ($($item: expr),*) => {
-            Value::List(vec![$($item),*])
-        };
-    }
+    macro_rules! list { ($($item: expr),*) => { Value::List(vec![$($item),*]) }; }
 
     macro_rules! obj {
         ($id: literal, $value: expr) => {
@@ -521,14 +517,14 @@ macro_rules! parse_value {
     };
     ($value: expr, i32) => {
         match $value {
-            Value::String(s) => s.parse().unwrap(),
+            Value::String(s) => s.parse().expect("Expected number"),
             Value::Number(n) => n as i32,
             _ => panic!("Expected string or number"),
         }
     };
     ($value: expr, f32) => {
         match $value {
-            Value::String(s) => s.parse().unwrap(),
+            Value::String(s) => s.parse().expect("Expected number"),
             Value::Number(n) => n,
             _ => panic!("Expected string or number"),
         }
@@ -536,15 +532,11 @@ macro_rules! parse_value {
 }
 
 #[macro_export]
-macro_rules! evaluator {
-    (struct $name:ident {
+macro_rules! impl_evaluate {
+    (struct Globals {
         $($field_name:ident: $field_type:tt,)*
     }) => {
-        struct $name {
-            $($field_name: $field_type,)*
-        }
-
-        impl $name {
+        impl Globals {
             pub fn evaluate(&mut self, objs: Vec<Object>) {
                 for obj in objs {
                     match obj.id.as_str() {
@@ -557,11 +549,50 @@ macro_rules! evaluator {
             }
         }
     };
+    (struct $name: ident {
+        $($field_name:ident: $field_type:tt,)*
+    }) => {
+        impl $name {
+            pub fn evaluate(&mut self, objs: Vec<Object>) {
+                if let Some(obj) = objs.iter().find(|o| o.id == stringify!($name).to_lowercase()) {
+                    if let Value::List(list) = &obj.value {
+                        for obj in list {
+                            match obj.id.as_str() {
+                                $(stringify!($field_name) => {
+                                    self.$field_name = parse_value!(obj.value.clone(), $field_type);
+                                })*
+                                _ => {},
+                            }
+                        }
+                    } else {
+                        panic!("Expected {} to be a list of args", stringify!($name));
+                    }
+                }
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! evaluator {
+    (struct $name: ident {
+        $($field_name:ident: $field_type:tt,)*
+    }) => {
+        struct $name {
+            $($field_name: $field_type,)*
+        }
+
+        impl_evaluate!(struct $name {
+            $($field_name: $field_type,)*
+        });
+    }
 }
 
 #[cfg(test)]
 mod test_evaluate {
     use crate::{Object, Value};
+
+    macro_rules! list { ($($item: expr),*) => { Value::List(vec![$($item),*]) }; }
 
     macro_rules! obj {
         ($id: literal, $value: expr) => {
@@ -579,9 +610,18 @@ mod test_evaluate {
         }
     }
 
+    evaluator! {
+        struct Reimu {
+            age: i32,
+        }
+    }
+
     #[test]
-    fn evaluates_string() {
-        let objs = vec![obj!("text", Value::String("hi mom!".to_string()))];
+    fn evaluates_globals() {
+        let objs = vec![
+            obj!("text", Value::String("hi mom!".to_string())),
+            obj!("number", Value::Number(69.0)),
+        ];
 
         let mut res = Globals {
             text: String::new(),
@@ -591,5 +631,16 @@ mod test_evaluate {
         res.evaluate(objs);
 
         assert_eq!(res.text, "hi mom!");
+        assert_eq!(res.number, 69);
+    }
+
+    #[test]
+    fn evaluates_objects() {
+        let objs = vec![obj!("reimu", list![obj!("age", Value::Number(17.0))])];
+
+        let mut res = Reimu { age: 0 };
+        res.evaluate(objs);
+
+        assert_eq!(res.age, 17);
     }
 }
