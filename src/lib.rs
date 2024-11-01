@@ -27,9 +27,9 @@ macro_rules! token_macro {
     };
 }
 
-const PREPOSITIONS: [&str; 4] = ["the", "a", "an", "and"];
+const PREPOSITIONS: [&str; 5] = ["the", "a", "an", "and", "also"];
 const KEYWORDS: [&str; 1] = ["is"];
-const POSSESIVES: [&str; 2] = ["s", "of"];
+const POSSESIVES: [&str; 4] = ["s", "of", "has", "have"];
 
 macro_rules! contains {
     ($list: ident, $word: ident) => {
@@ -72,7 +72,7 @@ fn tokenize(text: &str) -> Vec<Token> {
                 let string = String::from_iter(chars.by_ref().take_while(|c| *c != '"'));
                 Token::String(string)
             }
-            ' ' | ',' => {
+            c if c.is_whitespace() || c.is_ascii_punctuation() => {
                 chars.next();
                 Token::None
             }
@@ -153,6 +153,7 @@ mod test_tokenizer {
     #[test]
     fn recognizes_posesives() {
         expect("mcdonald's", [ident!("mcdonald"), poss!("s")]);
+        expect("minecraft has", [ident!("minecraft"), poss!("has")]);
     }
 
     #[test]
@@ -257,54 +258,104 @@ fn parse(tokens: Vec<Token>) -> Vec<Object> {
             (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
                 if k == "s" =>
             {
-                match (tokens.next().unwrap(), tokens.next().unwrap()) {
-                    (Token::Keyword(k), Token::Number(value)) if k == "is" => {
-                        let value = Value::Number(*value);
-
-                        match find_mut_obj!(objects, name) {
-                            Some(obj) => match &mut obj.value {
-                                Value::List(list) => match find_mut_obj!(list, property) {
-                                    Some(obj) => obj.value = value,
-                                    None => list.push(Object {
-                                        id: property.to_string(),
-                                        value,
-                                    }),
-                                },
-                                _ => panic!("Expected {name} to be a list of args"),
-                            },
-                            None => objects.push(Object {
-                                id: name.to_string(),
-                                value: Value::List(vec![Object {
-                                    id: property.to_string(),
-                                    value,
-                                }]),
-                            }),
-                        }
+                let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
+                    (Token::Keyword(k), Token::Number(value)) if k == "is" => Value::Number(*value),
+                    (Token::Keyword(k), Token::String(value)) if k == "is" => {
+                        Value::String(value.to_string())
                     }
                     (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
-                        let value = find_value!(objects, var).clone();
-
-                        match find_mut_obj!(objects, name) {
-                            Some(obj) => match &mut obj.value {
-                                Value::List(list) => match find_mut_obj!(list, property) {
-                                    Some(obj) => obj.value = value,
-                                    None => list.push(Object {
-                                        id: property.to_string(),
-                                        value,
-                                    }),
-                                },
-                                _ => panic!("Expected {name} to be a list of args"),
-                            },
-                            None => objects.push(Object {
-                                id: name.to_string(),
-                                value: Value::List(vec![Object {
-                                    id: property.to_string(),
-                                    value,
-                                }]),
-                            }),
-                        }
+                        find_value!(objects, var).clone()
                     }
                     (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
+                };
+
+                if let Some(obj) = find_mut_obj!(objects, name) {
+                    match &mut obj.value {
+                        Value::List(list) => match find_mut_obj!(list, property) {
+                            Some(obj) => obj.value = value,
+                            None => list.push(Object {
+                                id: property.to_string(),
+                                value,
+                            }),
+                        },
+                        _ => panic!("Expected {name} to be a list of args"),
+                    }
+                } else {
+                    objects.push(Object {
+                        id: name.to_string(),
+                        value: Value::List(vec![Object {
+                            id: property.to_string(),
+                            value,
+                        }]),
+                    });
+                }
+            }
+            // ident! poss! ident!
+            (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
+                if k == "has" || k == "have" =>
+            {
+                let value = match tokens.next().unwrap() {
+                    Token::Number(value) => Value::Number(*value),
+                    Token::String(value) => Value::String(value.to_string()),
+                    Token::Identifier(var) => find_value!(objects, var).clone(),
+                    _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
+                };
+
+                match find_mut_obj!(objects, name) {
+                    Some(obj) => match &mut obj.value {
+                        Value::List(list) => match find_mut_obj!(list, property) {
+                            Some(obj) => obj.value = value,
+                            None => list.push(Object {
+                                id: property.to_string(),
+                                value,
+                            }),
+                        },
+                        _ => panic!("Expected {name} to be a list of args"),
+                    },
+                    None => objects.push(Object {
+                        id: name.to_string(),
+                        value: Value::List(vec![Object {
+                            id: property.to_string(),
+                            value,
+                        }]),
+                    }),
+                }
+            }
+            // ident! poss! ident!
+            (Token::Identifier(property), Token::Possesive(k), Token::Identifier(name))
+                if k == "of" =>
+            {
+                // TODO: Macro his
+                let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
+                    (Token::Keyword(k), Token::Number(value)) if k == "is" => Value::Number(*value),
+                    (Token::Keyword(k), Token::String(value)) if k == "is" => {
+                        Value::String(value.to_string())
+                    }
+                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
+                        find_value!(objects, var).clone()
+                    }
+                    (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
+                };
+
+                // TODO: And macro this
+                match find_mut_obj!(objects, name) {
+                    Some(obj) => match &mut obj.value {
+                        Value::List(list) => match find_mut_obj!(list, property) {
+                            Some(obj) => obj.value = value,
+                            None => list.push(Object {
+                                id: property.to_string(),
+                                value,
+                            }),
+                        },
+                        _ => panic!("Expected {name} to be a list of args"),
+                    },
+                    None => objects.push(Object {
+                        id: name.to_string(),
+                        value: Value::List(vec![Object {
+                            id: property.to_string(),
+                            value,
+                        }]),
+                    }),
                 }
             }
             _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
@@ -440,6 +491,22 @@ mod test_parser {
                 num!(18.0),
             ],
             [obj!("marisa", list![obj!("age", Value::Number(18.0))])],
+        );
+
+        expect(
+            [ident!("marisa"), poss!("has"), ident!("age"), num!(15.0)],
+            [obj!("marisa", list![obj!("age", Value::Number(15.0))])],
+        );
+
+        expect(
+            [
+                ident!("age"),
+                poss!("of"),
+                ident!("marisa"),
+                kword!("is"),
+                num!(15.0),
+            ],
+            [obj!("marisa", list![obj!("age", Value::Number(15.0))])],
         );
     }
 
@@ -581,6 +648,7 @@ macro_rules! evaluator {
     (struct $name: ident {
         $($field_name:ident: $field_type:tt,)*
     }) => {
+        #[derive(Default, Debug)]
         struct $name {
             $($field_name: $field_type,)*
         }
@@ -593,6 +661,13 @@ macro_rules! evaluator {
             #[allow(dead_code)]
             fn evaluate_text(&mut self, text: &str) {
                 self.evaluate(parse(tokenize(text)));
+            }
+
+            #[allow(dead_code)]
+            fn new(code: &str) -> Self {
+                let mut me = Self::default();
+                me.evaluate_text(code);
+                me
             }
         }
     }
@@ -665,6 +740,8 @@ mod test_integration {
         }
     }
 
+    // TODO: Be able to derive evaluator, or use derives inside
+
     evaluator! {
         struct Reimu {
             age: i32,
@@ -680,23 +757,20 @@ mod test_integration {
 
     #[test]
     fn integrates_from_start_to_finish() {
-        let input = r#"age is 17, item is "Minecraft", and reimu's age is age, and marisa's age is 18, reimu's item is item"#;
+        let input = r#"
+        the age is 17, and item is "Minecraft".
+        the age of marisa is 18, and reimu's age is age, also reimu has an item item
+        "#;
 
-        let mut globals = Globals { age: 0 };
-        globals.evaluate_text(input);
-
-        let mut reimu = Reimu {
-            age: 0,
-            item: String::new(),
-        };
-        reimu.evaluate_text(input);
-
-        let mut marisa = Marisa { age: 0 };
-        marisa.evaluate_text(input);
+        let globals = Globals::new(input);
+        let reimu = Reimu::new(input);
+        let marisa = Marisa::new(input);
 
         assert_eq!(globals.age, 17);
+
         assert_eq!(reimu.age, 17);
         assert_eq!(reimu.item, "Minecraft");
+
         assert_eq!(marisa.age, 18);
     }
 }
