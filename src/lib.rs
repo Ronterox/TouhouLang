@@ -1,3 +1,5 @@
+use proc_macro::TokenStream;
+
 #[derive(Debug, PartialEq, Clone)]
 enum Token {
     String(String),
@@ -577,6 +579,17 @@ mod test_parser {
 }
 
 #[macro_export]
+macro_rules! parse_number {
+    ($value: expr, $num: ty) => {
+        match $value {
+            Value::String(s) => s.parse().expect("Expected number"),
+            Value::Number(n) => n as $num,
+            _ => panic!("Expected string or number"),
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! parse_value {
     ($value: expr, String) => {
         match $value {
@@ -585,27 +598,13 @@ macro_rules! parse_value {
             _ => panic!("Expected string or number"),
         }
     };
-    ($value: expr, i32) => {
-        match $value {
-            Value::String(s) => s.parse().expect("Expected number"),
-            Value::Number(n) => n as i32,
-            _ => panic!("Expected string or number"),
-        }
-    };
-    ($value: expr, f32) => {
-        match $value {
-            Value::String(s) => s.parse().expect("Expected number"),
-            Value::Number(n) => n,
-            _ => panic!("Expected string or number"),
-        }
-    };
+    ($value: expr, i32) => { parse_number!($value, i32) };
+    ($value: expr, f32) => { parse_number!($value, f32) };
 }
 
 #[macro_export]
 macro_rules! impl_evaluate {
-    (struct Globals {
-        $($field_name:ident: $field_type:tt,)*
-    }) => {
+    (Globals, $($field_name:ident: $field_type:tt,)*) => {
         impl Globals {
             pub fn evaluate(&mut self, objs: Vec<Object>) {
                 for obj in objs {
@@ -619,9 +618,7 @@ macro_rules! impl_evaluate {
             }
         }
     };
-    (struct $name: ident {
-        $($field_name:ident: $field_type:tt,)*
-    }) => {
+    ($name: ident, $($field_name:ident: $field_type:tt,)*) => {
         impl $name {
             pub fn evaluate(&mut self, objs: Vec<Object>) {
                 if let Some(obj) = objs.iter().find(|o| o.id == stringify!($name).to_lowercase()) {
@@ -645,17 +642,19 @@ macro_rules! impl_evaluate {
 
 #[macro_export]
 macro_rules! evaluator {
-    (struct $name: ident {
+    (
+    $(#[$doc:meta])*
+    struct $name: ident {
         $($field_name:ident: $field_type:tt,)*
-    }) => {
-        #[derive(Default, Debug)]
+    }
+    ) => {
+        $(#[$doc])*
+        #[derive(Default)]
         struct $name {
             $($field_name: $field_type,)*
         }
 
-        impl_evaluate!(struct $name {
-            $($field_name: $field_type,)*
-        });
+        impl_evaluate!($name, $($field_name: $field_type,)*);
 
         impl $name {
             #[allow(dead_code)]
@@ -739,8 +738,6 @@ mod test_integration {
             age: i32,
         }
     }
-
-    // TODO: Be able to derive evaluator, or use derives inside
 
     evaluator! {
         struct Reimu {
