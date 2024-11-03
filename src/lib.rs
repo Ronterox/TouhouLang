@@ -1,100 +1,99 @@
-use proc_macro::TokenStream;
-
-#[derive(Debug, PartialEq, Clone)]
-enum Token {
-    String(String),
-    Preposition(String),
-    Possesive(String),
-    Identifier(String),
-    Keyword(String),
-    Number(f32),
-    None,
-}
-
-#[macro_export]
-macro_rules! token_macro {
-    ($id: ident, Number) => {
-        macro_rules! $id {
-            ($name: literal) => {
-                Token::Number($name)
-            };
-        }
-    };
-    ($id: ident, $token: ident) => {
-        macro_rules! $id {
-            ($name: literal) => {
-                Token::$token($name.to_string())
-            };
-        }
-    };
-}
-
-const PREPOSITIONS: [&str; 5] = ["the", "a", "an", "and", "also"];
-const KEYWORDS: [&str; 1] = ["is"];
-const POSSESIVES: [&str; 4] = ["s", "of", "has", "have"];
-
-macro_rules! contains {
-    ($list: ident, $word: ident) => {
-        $list.contains(&$word.as_str())
-    };
-}
-
-#[allow(dead_code)]
-fn tokenize(text: &str) -> Vec<Token> {
-    let mut tokens = vec![];
-    let mut chars = text
-        .trim()
-        .chars()
-        .skip_while(|c| c.is_whitespace())
-        .peekable();
-
-    while let Some(c) = chars.peek() {
-        let token = match c {
-            'a'..='z' | 'A'..='Z' | '_' => {
-                let condition = |c: &char| c.is_alphanumeric() || *c == '_';
-                let word = String::from_iter(chars.by_ref().take_while(condition));
-
-                if contains!(PREPOSITIONS, word) {
-                    Token::Preposition(word)
-                } else if contains!(KEYWORDS, word) {
-                    Token::Keyword(word)
-                } else if contains!(POSSESIVES, word) {
-                    Token::Possesive(word)
-                } else {
-                    Token::Identifier(word)
-                }
-            }
-            '0'..='9' => {
-                let condition = |c: &char| c.is_digit(10) || *c == '.';
-                let number = String::from_iter(chars.by_ref().take_while(condition));
-                Token::Number(number.parse().expect("Correct number format"))
-            }
-            '"' => {
-                chars.next();
-                let string = String::from_iter(chars.by_ref().take_while(|c| *c != '"'));
-                Token::String(string)
-            }
-            c if c.is_whitespace() || c.is_ascii_punctuation() => {
-                chars.next();
-                Token::None
-            }
-            _ => panic!("Unexpected character: ->{c}<-"),
-        };
-        tokens.push(token);
+pub mod tokenizer {
+    #[derive(Debug, PartialEq, Clone)]
+    pub enum Token {
+        String(String),
+        Preposition(String),
+        Possesive(String),
+        Identifier(String),
+        Keyword(String),
+        Number(f32),
+        None,
     }
 
-    return tokens
-        .into_iter()
-        .filter(|t| match t {
-            Token::None | Token::Preposition(_) => false,
-            _ => true,
-        })
-        .collect();
+    #[macro_export]
+    macro_rules! token_macro {
+        ($id: ident, Number) => {
+            macro_rules! $id {
+                ($name: literal) => {
+                    Token::Number($name)
+                };
+            }
+        };
+        ($id: ident, $token: ident) => {
+            macro_rules! $id {
+                ($name: literal) => {
+                    Token::$token($name.to_string())
+                };
+            }
+        };
+    }
+
+    const PREPOSITIONS: [&str; 5] = ["the", "a", "an", "and", "also"];
+    const KEYWORDS: [&str; 1] = ["is"];
+    const POSSESIVES: [&str; 4] = ["s", "of", "has", "have"];
+
+    macro_rules! contains {
+        ($list: ident, $word: ident) => {
+            $list.contains(&$word.as_str())
+        };
+    }
+
+    pub fn tokenize(text: &str) -> Vec<Token> {
+        let mut tokens = vec![];
+        let mut chars = text
+            .trim()
+            .chars()
+            .skip_while(|c| c.is_whitespace())
+            .peekable();
+
+        while let Some(c) = chars.peek() {
+            let token = match c {
+                'a'..='z' | 'A'..='Z' | '_' => {
+                    let condition = |c: &char| c.is_alphanumeric() || *c == '_';
+                    let word = String::from_iter(chars.by_ref().take_while(condition));
+
+                    if contains!(PREPOSITIONS, word) {
+                        Token::Preposition(word)
+                    } else if contains!(KEYWORDS, word) {
+                        Token::Keyword(word)
+                    } else if contains!(POSSESIVES, word) {
+                        Token::Possesive(word)
+                    } else {
+                        Token::Identifier(word)
+                    }
+                }
+                '0'..='9' => {
+                    let condition = |c: &char| c.is_digit(10) || *c == '.';
+                    let number = String::from_iter(chars.by_ref().take_while(condition));
+                    Token::Number(number.parse().expect("Correct number format"))
+                }
+                '"' => {
+                    chars.next();
+                    let string = String::from_iter(chars.by_ref().take_while(|c| *c != '"'));
+                    Token::String(string)
+                }
+                c if c.is_whitespace() || c.is_ascii_punctuation() => {
+                    chars.next();
+                    Token::None
+                }
+                _ => panic!("Unexpected character: ->{c}<-"),
+            };
+            tokens.push(token);
+        }
+
+        return tokens
+            .into_iter()
+            .filter(|t| match t {
+                Token::None | Token::Preposition(_) => false,
+                _ => true,
+            })
+            .collect();
+    }
 }
 
 #[cfg(test)]
 mod test_tokenizer {
-    use crate::{tokenize, Token};
+    use crate::{token_macro, tokenizer::*};
 
     token_macro!(ident, Identifier);
     token_macro!(num, Number);
@@ -179,197 +178,206 @@ mod test_tokenizer {
     }
 }
 
-macro_rules! find_mut_obj {
-    ($list: ident, $name: ident) => {
-        $list.iter_mut().find(|o| o.id == *$name)
-    };
-}
+pub mod parser {
+    use crate::tokenizer::Token;
 
-macro_rules! find_obj {
-    ($list: ident, $name: ident) => {
-        $list.iter().find(|o| o.id == *$name)
-    };
-}
-
-macro_rules! find_value {
-    ($list: ident, $name: ident) => {
-        find_obj!($list, $name).expect("Found object").value
-    };
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum Value {
-    Number(f32),
-    String(String),
-    List(Vec<Object>),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-struct Object {
-    id: String,
-    value: Value,
-}
-
-#[allow(dead_code)]
-fn parse(tokens: Vec<Token>) -> Vec<Object> {
-    let mut tokens = tokens.iter();
-    let mut objects = Vec::<Object>::new();
-
-    while let (Some(a), Some(b), Some(c)) = (tokens.next(), tokens.next(), tokens.next()) {
-        match (a, b, c) {
-            // ident! kword! num!
-            (Token::Identifier(name), Token::Keyword(k), Token::Number(value)) if k == "is" => {
-                let value = Value::Number(*value);
-
-                if let Some(obj) = find_mut_obj!(objects, name) {
-                    obj.value = value;
-                } else {
-                    objects.push(Object {
-                        id: name.to_string(),
-                        value,
-                    });
-                }
-            }
-            // ident! kword! str!
-            (Token::Identifier(name), Token::Keyword(k), Token::String(value)) if k == "is" => {
-                let value = Value::String(value.to_string());
-
-                if let Some(obj) = find_mut_obj!(objects, name) {
-                    obj.value = value;
-                } else {
-                    objects.push(Object {
-                        id: name.to_string(),
-                        value,
-                    });
-                }
-            }
-            // ident! kword! ident!
-            (Token::Identifier(name), Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
-                let value = find_value!(objects, var).clone();
-
-                if let Some(obj) = find_mut_obj!(objects, name) {
-                    obj.value = value;
-                } else {
-                    objects.push(Object {
-                        id: name.to_string(),
-                        value,
-                    });
-                }
-            }
-            // ident! poss! ident!
-            (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
-                if k == "s" =>
-            {
-                let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
-                    (Token::Keyword(k), Token::Number(value)) if k == "is" => Value::Number(*value),
-                    (Token::Keyword(k), Token::String(value)) if k == "is" => {
-                        Value::String(value.to_string())
-                    }
-                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
-                        find_value!(objects, var).clone()
-                    }
-                    (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
-                };
-
-                if let Some(obj) = find_mut_obj!(objects, name) {
-                    match &mut obj.value {
-                        Value::List(list) => match find_mut_obj!(list, property) {
-                            Some(obj) => obj.value = value,
-                            None => list.push(Object {
-                                id: property.to_string(),
-                                value,
-                            }),
-                        },
-                        _ => panic!("Expected {name} to be a list of args"),
-                    }
-                } else {
-                    objects.push(Object {
-                        id: name.to_string(),
-                        value: Value::List(vec![Object {
-                            id: property.to_string(),
-                            value,
-                        }]),
-                    });
-                }
-            }
-            // ident! poss! ident!
-            (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
-                if k == "has" || k == "have" =>
-            {
-                let value = match tokens.next().unwrap() {
-                    Token::Number(value) => Value::Number(*value),
-                    Token::String(value) => Value::String(value.to_string()),
-                    Token::Identifier(var) => find_value!(objects, var).clone(),
-                    _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
-                };
-
-                match find_mut_obj!(objects, name) {
-                    Some(obj) => match &mut obj.value {
-                        Value::List(list) => match find_mut_obj!(list, property) {
-                            Some(obj) => obj.value = value,
-                            None => list.push(Object {
-                                id: property.to_string(),
-                                value,
-                            }),
-                        },
-                        _ => panic!("Expected {name} to be a list of args"),
-                    },
-                    None => objects.push(Object {
-                        id: name.to_string(),
-                        value: Value::List(vec![Object {
-                            id: property.to_string(),
-                            value,
-                        }]),
-                    }),
-                }
-            }
-            // ident! poss! ident!
-            (Token::Identifier(property), Token::Possesive(k), Token::Identifier(name))
-                if k == "of" =>
-            {
-                // TODO: Macro his
-                let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
-                    (Token::Keyword(k), Token::Number(value)) if k == "is" => Value::Number(*value),
-                    (Token::Keyword(k), Token::String(value)) if k == "is" => {
-                        Value::String(value.to_string())
-                    }
-                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
-                        find_value!(objects, var).clone()
-                    }
-                    (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
-                };
-
-                // TODO: And macro this
-                match find_mut_obj!(objects, name) {
-                    Some(obj) => match &mut obj.value {
-                        Value::List(list) => match find_mut_obj!(list, property) {
-                            Some(obj) => obj.value = value,
-                            None => list.push(Object {
-                                id: property.to_string(),
-                                value,
-                            }),
-                        },
-                        _ => panic!("Expected {name} to be a list of args"),
-                    },
-                    None => objects.push(Object {
-                        id: name.to_string(),
-                        value: Value::List(vec![Object {
-                            id: property.to_string(),
-                            value,
-                        }]),
-                    }),
-                }
-            }
-            _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
-        }
+    macro_rules! find_mut_obj {
+        ($list: ident, $name: ident) => {
+            $list.iter_mut().find(|o| o.id == *$name)
+        };
     }
 
-    objects
+    macro_rules! find_obj {
+        ($list: ident, $name: ident) => {
+            $list.iter().find(|o| o.id == *$name)
+        };
+    }
+
+    macro_rules! find_value {
+        ($list: ident, $name: ident) => {
+            find_obj!($list, $name).expect("Didn't find object").value
+        };
+    }
+
+    #[derive(Debug, PartialEq, Clone)]
+    pub enum Value {
+        Number(f32),
+        String(String),
+        List(Vec<Object>),
+    }
+
+    #[derive(Debug, PartialEq, Clone)]
+    pub struct Object {
+        pub id: String,
+        pub value: Value,
+    }
+
+    pub fn parse(tokens: Vec<Token>) -> Vec<Object> {
+        let mut tokens = tokens.iter();
+        let mut objects = Vec::<Object>::new();
+
+        while let (Some(a), Some(b), Some(c)) = (tokens.next(), tokens.next(), tokens.next()) {
+            match (a, b, c) {
+                // ident! kword! num!
+                (Token::Identifier(name), Token::Keyword(k), Token::Number(value)) if k == "is" => {
+                    let value = Value::Number(*value);
+
+                    if let Some(obj) = find_mut_obj!(objects, name) {
+                        obj.value = value;
+                    } else {
+                        objects.push(Object {
+                            id: name.to_string(),
+                            value,
+                        });
+                    }
+                }
+                // ident! kword! str!
+                (Token::Identifier(name), Token::Keyword(k), Token::String(value)) if k == "is" => {
+                    let value = Value::String(value.to_string());
+
+                    if let Some(obj) = find_mut_obj!(objects, name) {
+                        obj.value = value;
+                    } else {
+                        objects.push(Object {
+                            id: name.to_string(),
+                            value,
+                        });
+                    }
+                }
+                // ident! kword! ident!
+                (Token::Identifier(name), Token::Keyword(k), Token::Identifier(var))
+                    if k == "is" =>
+                {
+                    let value = find_value!(objects, var).clone();
+
+                    if let Some(obj) = find_mut_obj!(objects, name) {
+                        obj.value = value;
+                    } else {
+                        objects.push(Object {
+                            id: name.to_string(),
+                            value,
+                        });
+                    }
+                }
+                // ident! poss! ident!
+                (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
+                    if k == "s" =>
+                {
+                    let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
+                        (Token::Keyword(k), Token::Number(value)) if k == "is" => {
+                            Value::Number(*value)
+                        }
+                        (Token::Keyword(k), Token::String(value)) if k == "is" => {
+                            Value::String(value.to_string())
+                        }
+                        (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
+                            find_value!(objects, var).clone()
+                        }
+                        (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
+                    };
+
+                    if let Some(obj) = find_mut_obj!(objects, name) {
+                        match &mut obj.value {
+                            Value::List(list) => match find_mut_obj!(list, property) {
+                                Some(obj) => obj.value = value,
+                                None => list.push(Object {
+                                    id: property.to_string(),
+                                    value,
+                                }),
+                            },
+                            _ => panic!("Expected {name} to be a list of args"),
+                        }
+                    } else {
+                        objects.push(Object {
+                            id: name.to_string(),
+                            value: Value::List(vec![Object {
+                                id: property.to_string(),
+                                value,
+                            }]),
+                        });
+                    }
+                }
+                // ident! poss! ident!
+                (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
+                    if k == "has" || k == "have" =>
+                {
+                    let value = match tokens.next().unwrap() {
+                        Token::Number(value) => Value::Number(*value),
+                        Token::String(value) => Value::String(value.to_string()),
+                        Token::Identifier(var) => find_value!(objects, var).clone(),
+                        _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
+                    };
+
+                    match find_mut_obj!(objects, name) {
+                        Some(obj) => match &mut obj.value {
+                            Value::List(list) => match find_mut_obj!(list, property) {
+                                Some(obj) => obj.value = value,
+                                None => list.push(Object {
+                                    id: property.to_string(),
+                                    value,
+                                }),
+                            },
+                            _ => panic!("Expected {name} to be a list of args"),
+                        },
+                        None => objects.push(Object {
+                            id: name.to_string(),
+                            value: Value::List(vec![Object {
+                                id: property.to_string(),
+                                value,
+                            }]),
+                        }),
+                    }
+                }
+                // ident! poss! ident!
+                (Token::Identifier(property), Token::Possesive(k), Token::Identifier(name))
+                    if k == "of" =>
+                {
+                    // TODO: Macro his
+                    let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
+                        (Token::Keyword(k), Token::Number(value)) if k == "is" => {
+                            Value::Number(*value)
+                        }
+                        (Token::Keyword(k), Token::String(value)) if k == "is" => {
+                            Value::String(value.to_string())
+                        }
+                        (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
+                            find_value!(objects, var).clone()
+                        }
+                        (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
+                    };
+
+                    // TODO: And macro this
+                    match find_mut_obj!(objects, name) {
+                        Some(obj) => match &mut obj.value {
+                            Value::List(list) => match find_mut_obj!(list, property) {
+                                Some(obj) => obj.value = value,
+                                None => list.push(Object {
+                                    id: property.to_string(),
+                                    value,
+                                }),
+                            },
+                            _ => panic!("Expected {name} to be a list of args"),
+                        },
+                        None => objects.push(Object {
+                            id: name.to_string(),
+                            value: Value::List(vec![Object {
+                                id: property.to_string(),
+                                value,
+                            }]),
+                        }),
+                    }
+                }
+                _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
+            }
+        }
+
+        objects
+    }
 }
 
 #[cfg(test)]
 mod test_parser {
-    use crate::{parse, Object, Token, Value};
+    use crate::{parser::*, token_macro, tokenizer::Token};
 
     token_macro!(ident, Identifier);
     token_macro!(num, Number);
@@ -578,95 +586,102 @@ mod test_parser {
     }
 }
 
-#[macro_export]
-macro_rules! parse_number {
-    ($value: expr, $num: ty) => {
-        match $value {
-            Value::String(s) => s.parse().expect("Expected number"),
-            Value::Number(n) => n as $num,
-            _ => panic!("Expected string or number"),
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! parse_value {
-    ($value: expr, String) => {
-        match $value {
-            Value::String(s) => s,
-            Value::Number(n) => n.to_string(),
-            _ => panic!("Expected string or number"),
-        }
-    };
-    ($value: expr, i32) => { parse_number!($value, i32) };
-    ($value: expr, f32) => { parse_number!($value, f32) };
-}
-
-#[macro_export]
-macro_rules! impl_evaluate {
-    (Globals, $($field_name:ident: $field_type:tt,)*) => {
-        impl Globals {
-            pub fn evaluate(&mut self, objs: Vec<Object>) {
-                for obj in objs {
-                    match obj.id.as_str() {
-                        $(stringify!($field_name) => {
-                            self.$field_name = parse_value!(obj.value, $field_type);
-                        })*
-                        _ => {},
-                    }
-                }
+#[macro_use]
+mod evaluator {
+    #[allow(unused_macros)]
+    macro_rules! parse_number {
+        ($value: expr, $num: ty) => {
+            match $value {
+                Value::String(s) => s.parse().expect("Expected number"),
+                Value::Number(n) => n as $num,
+                _ => panic!("Expected string or number"),
             }
-        }
-    };
-    ($name: ident, $($field_name:ident: $field_type:tt,)*) => {
-        impl $name {
-            pub fn evaluate(&mut self, objs: Vec<Object>) {
-                if let Some(obj) = objs.iter().find(|o| o.id == stringify!($name).to_lowercase()) {
-                    if let Value::List(list) = &obj.value {
-                        for obj in list {
-                            match obj.id.as_str() {
-                                $(stringify!($field_name) => {
-                                    self.$field_name = parse_value!(obj.value.clone(), $field_type);
-                                })*
-                                _ => {},
-                            }
-                        }
-                    } else {
-                        panic!("Expected {} to be a list of args", stringify!($name));
-                    }
-                }
-            }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! evaluator {
-    (
-    $(#[$doc:meta])*
-    struct $name: ident {
-        $($field_name:ident: $field_type:tt,)*
+        };
     }
-    ) => {
-        $(#[$doc])*
-        #[derive(Default)]
-        struct $name {
-            $($field_name: $field_type,)*
+
+    #[allow(unused_macros)]
+    macro_rules! parse_value {
+        ($value: expr, String) => {
+            match $value {
+                Value::String(s) => s,
+                Value::Number(n) => n.to_string(),
+                _ => panic!("Expected string or number"),
+            }
+        };
+        ($value: expr, i32) => {
+            parse_number!($value, i32)
+        };
+        ($value: expr, f32) => {
+            parse_number!($value, f32)
+        };
+    }
+
+    #[allow(unused_macros)]
+    macro_rules! impl_evaluate {
+        (Globals, $($field_name:ident: $field_type:tt,)*) => {
+            impl Globals {
+                pub fn evaluate(&mut self, objs: Vec<Object>) {
+                    for obj in objs {
+                        match obj.id.as_str() {
+                            $(stringify!($field_name) => {
+                                self.$field_name = parse_value!(obj.value, $field_type);
+                            })*
+                            _ => {},
+                        }
+                    }
+                }
+            }
+        };
+        ($name: ident, $($field_name:ident: $field_type:tt,)*) => {
+            impl $name {
+                pub fn evaluate(&mut self, objs: Vec<Object>) {
+                    if let Some(obj) = objs.iter().find(|o| o.id == stringify!($name).to_lowercase()) {
+                        if let Value::List(list) = &obj.value {
+                            for obj in list {
+                                match obj.id.as_str() {
+                                    $(stringify!($field_name) => {
+                                        self.$field_name = parse_value!(obj.value.clone(), $field_type);
+                                    })*
+                                    _ => {},
+                                }
+                            }
+                        } else {
+                            panic!("Expected {} to be a list of args", stringify!($name));
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    #[macro_export]
+    macro_rules! evaluate {
+        (
+        $(#[$doc:meta])*
+        struct $name: ident {
+            $($field_name:ident: $field_type:tt,)*
         }
-
-        impl_evaluate!($name, $($field_name: $field_type,)*);
-
-        impl $name {
-            #[allow(dead_code)]
-            fn evaluate_text(&mut self, text: &str) {
-                self.evaluate(parse(tokenize(text)));
+        ) => {
+            $(#[$doc])*
+            #[derive(Default)]
+            struct $name {
+                $($field_name: $field_type,)*
             }
 
-            #[allow(dead_code)]
-            fn new(code: &str) -> Self {
-                let mut me = Self::default();
-                me.evaluate_text(code);
-                me
+            impl_evaluate!($name, $($field_name: $field_type,)*);
+
+            impl $name {
+                #[allow(dead_code)]
+                fn evaluate_text(&mut self, text: &str) {
+                    self.evaluate(parse(tokenize(text)));
+                }
+
+                #[allow(dead_code)]
+                fn new(code: &str) -> Self {
+                    let mut me = Self::default();
+                    me.evaluate_text(code);
+                    me
+                }
             }
         }
     }
@@ -674,7 +689,7 @@ macro_rules! evaluator {
 
 #[cfg(test)]
 mod test_evaluate {
-    use crate::{parse, tokenize, Object, Value};
+    use crate::{parser::*, tokenizer::tokenize, evaluate};
 
     macro_rules! list { ($($item: expr),*) => { Value::List(vec![$($item),*]) }; }
 
@@ -687,14 +702,14 @@ mod test_evaluate {
         };
     }
 
-    evaluator! {
+    evaluate! {
         struct Globals {
             text: String,
             number: i32,
         }
     }
 
-    evaluator! {
+    evaluate! {
         struct Reimu {
             age: i32,
         }
@@ -731,22 +746,22 @@ mod test_evaluate {
 
 #[cfg(test)]
 mod test_integration {
-    use crate::{parse, tokenize, Object, Value};
+    use crate::{parser::*, tokenizer::tokenize, evaluate};
 
-    evaluator! {
+    evaluate! {
         struct Globals {
             age: i32,
         }
     }
 
-    evaluator! {
+    evaluate! {
         struct Reimu {
             age: i32,
             item: String,
         }
     }
 
-    evaluator! {
+    evaluate! {
         struct Marisa {
             age: i32,
         }
