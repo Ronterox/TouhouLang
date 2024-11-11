@@ -6,7 +6,7 @@ mod evaluator;
 
 #[cfg(test)]
 mod test_integration {
-    use crate::{evaluate, parser::*, tokenizer::tokenize};
+    use crate::evaluate;
 
     evaluate! {
         struct Globals {

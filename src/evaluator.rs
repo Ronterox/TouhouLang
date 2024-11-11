@@ -2,8 +2,8 @@
 macro_rules! parse_number {
     ($value: expr, $num: ty) => {
         match $value {
-            Value::String(s) => s.parse().expect("Expected number"),
-            Value::Number(n) => n as $num,
+            $crate::parser::Value::String(s) => s.parse().expect("Expected number"),
+            $crate::parser::Value::Number(n) => n as $num,
             _ => panic!("Expected string or number"),
         }
     };
@@ -13,8 +13,8 @@ macro_rules! parse_number {
 macro_rules! parse_value {
     ($value: expr, String) => {
         match $value {
-            Value::String(s) => s,
-            Value::Number(n) => n.to_string(),
+            $crate::parser::Value::String(s) => s,
+            $crate::parser::Value::Number(n) => n.to_string(),
             _ => std::panic!("Expected string or number"),
         }
     };
@@ -30,7 +30,7 @@ macro_rules! parse_value {
 macro_rules! impl_evaluate {
     (Globals, $($field_name:ident: $field_type:tt,)*) => {
         impl Globals {
-            pub fn evaluate(&mut self, objs: Vec<Object>) {
+            pub fn evaluate(&mut self, objs: Vec<$crate::parser::Object>) {
                 for obj in objs {
                     match obj.id.as_str() {
                         $(stringify!($field_name) => {
@@ -44,9 +44,9 @@ macro_rules! impl_evaluate {
     };
     ($name: ident, $($field_name:ident: $field_type:tt,)*) => {
         impl $name {
-            pub fn evaluate(&mut self, objs: Vec<Object>) {
+            pub fn evaluate(&mut self, objs: Vec<$crate::parser::Object>) {
                 if let Some(obj) = objs.iter().find(|o| o.id == stringify!($name).to_lowercase()) {
-                    if let Value::List(list) = &obj.value {
+                    if let $crate::parser::Value::List(list) = &obj.value {
                         for obj in list {
                             match obj.id.as_str() {
                                 $(stringify!($field_name) => {
@@ -65,6 +65,27 @@ macro_rules! impl_evaluate {
 }
 
 #[macro_export]
+macro_rules! impl_struct {
+    ($name: ident, $($field_name:ident: $field_type:tt,)*) => {
+        $crate::impl_evaluate!($name, $($field_name: $field_type,)*);
+
+        impl $name {
+            #[allow(dead_code)]
+            fn evaluate_text(&mut self, text: &str) {
+                self.evaluate($crate::parser::parse($crate::tokenizer::tokenize(text)));
+            }
+
+            #[allow(dead_code)]
+            fn new(code: &str) -> Self {
+                let mut me = Self::default();
+                me.evaluate_text(code);
+                me
+            }
+        }
+    }
+}
+
+#[macro_export]
 macro_rules! evaluate {
     (
     $(#[$doc:meta])*
@@ -78,21 +99,18 @@ macro_rules! evaluate {
             $($field_name: $field_type,)*
         }
 
-        $crate::impl_evaluate!($name, $($field_name: $field_type,)*);
-
-        impl $name {
-            #[allow(dead_code)]
-            fn evaluate_text(&mut self, text: &str) {
-                self.evaluate(parse(tokenize(text)));
-            }
-
-            #[allow(dead_code)]
-            fn new(code: &str) -> Self {
-                let mut me = Self::default();
-                me.evaluate_text(code);
-                me
-            }
-        }
+        $crate::impl_struct!($name, $($field_name: $field_type,)*);
     }
 }
 
+#[macro_export]
+macro_rules! evaluate_derive {
+    (
+    $(#[$doc:meta])*
+    struct $name: ident {
+        $($field_name:ident: $field_type:tt,)*
+    }
+    ) => {
+        $crate::impl_struct!($name, $($field_name: $field_type,)*);
+    }
+}

@@ -33,7 +33,7 @@ const POSSESIVES: [&str; 4] = ["s", "of", "has", "have"];
 
 macro_rules! contains {
     ($list: ident, $word: ident) => {
-        $list.contains(&$word.as_str())
+        $list.contains(&$word.to_lowercase().as_str())
     };
 }
 

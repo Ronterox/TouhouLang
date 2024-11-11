@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+tmux-send-cmd 'proc_macro' 'cd proc_macro_part/ && nvim .'
+
+nvim .

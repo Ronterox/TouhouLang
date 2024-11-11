@@ -1,4 +1,4 @@
-use touhoulang::{evaluate, parser::*, tokenizer::tokenize};
+use touhoulang::{evaluate, parser::*};
 
 macro_rules! list { ($($item: expr),*) => { Value::List(vec![$($item),*]) }; }
 
