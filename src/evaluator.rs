@@ -76,7 +76,7 @@ macro_rules! impl_struct {
             }
 
             #[allow(dead_code)]
-            fn new(code: &str) -> Self {
+            fn from_str(code: &str) -> Self {
                 let mut me = Self::default();
                 me.evaluate_text(code);
                 me

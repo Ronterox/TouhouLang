@@ -34,9 +34,9 @@ mod test_integration {
         the age of marisa is 18, and reimu's age is age, also reimu has an item item
         "#;
 
-        let globals = Globals::new(input);
-        let reimu = Reimu::new(input);
-        let marisa = Marisa::new(input);
+        let globals = Globals::from_str(input);
+        let reimu = Reimu::from_str(input);
+        let marisa = Marisa::from_str(input);
 
         assert_eq!(globals.age, 17);
 

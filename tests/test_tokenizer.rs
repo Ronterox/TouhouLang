@@ -60,6 +60,7 @@ fn multiple_tokens() {
 fn recognizes_posesives() {
     expect("mcdonald's", [ident!("mcdonald"), poss!("s")]);
     expect("minecraft has", [ident!("minecraft"), poss!("has")]);
+    expect("age of reimu", [ident!("age"), poss!("of"), ident!("reimu")]);
 }
 
 #[test]
