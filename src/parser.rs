@@ -29,6 +29,23 @@ macro_rules! val_obj {
     };
 }
 
+#[macro_export]
+macro_rules! set_obj_property {
+    ($result: ident, $name: ident, $property: ident, $value: ident) => {
+        if let Some(obj) = $result.get_mut(&$name.to_lowercase()) {
+            match obj {
+                Value::Object(map) => map.insert($property.to_string(), $value),
+                tt => panic!("Expected {} to be a object but found {tt:?}!", $name),
+            }
+        } else {
+            $result.insert(
+                $name.to_string(),
+                Value::Object(HashMap::from([($property.to_string(), $value)])),
+            )
+        };
+    };
+}
+
 pub type Object = std::collections::HashMap<String, Value>;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -57,7 +74,7 @@ pub fn parse(tokens: Vec<Token>) -> Object {
             }
             // ident! kword! ident!
             (Token::Identifier(name), Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
-                let value = result.get(var).expect(&format!("Didn't find {}", var));
+                let value = result.get(var).expect(&format!("Didn't find {var}"));
                 result.insert(name.to_lowercase(), value.clone());
             }
             // ident! poss! ident!
@@ -71,22 +88,12 @@ pub fn parse(tokens: Vec<Token>) -> Object {
                     }
                     (Token::Keyword(k), Token::Identifier(var)) if k == "is" => result
                         .get(var)
-                        .expect(&format!("Didn't find {}", var))
+                        .expect(&format!("Didn't find {var}"))
                         .clone(),
                     (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
                 };
 
-                if let Some(obj) = result.get_mut(&name.to_lowercase()) {
-                    match obj {
-                        Value::Object(map) => map.insert(property.to_string(), value),
-                        tt => panic!("Expected {name} to be a object but found {tt:?}!"),
-                    };
-                } else {
-                    result.insert(
-                        name.to_string(),
-                        Value::Object(HashMap::from([(property.to_string(), value)])),
-                    );
-                }
+                set_obj_property!(result, name, property, value);
             }
             // ident! poss! ident!
             (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
@@ -97,22 +104,12 @@ pub fn parse(tokens: Vec<Token>) -> Object {
                     Token::String(value) => Value::String(value.to_string()),
                     Token::Identifier(var) => result
                         .get(&var.to_lowercase())
-                        .expect(&format!("Didn't find {}", var))
+                        .expect(&format!("Didn't find {var}"))
                         .clone(),
                     _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
                 };
 
-                if let Some(obj) = result.get_mut(&name.to_lowercase()) {
-                    match obj {
-                        Value::Object(map) => map.insert(property.to_string(), value),
-                        tt => panic!("Expected {name} to be a object but found {tt:?}!"),
-                    }
-                } else {
-                    result.insert(
-                        name.to_string(),
-                        Value::Object(HashMap::from([(property.to_string(), value)])),
-                    )
-                };
+                set_obj_property!(result, name, property, value);
             }
             // ident! poss! ident!
             (Token::Identifier(property), Token::Possesive(k), Token::Identifier(name))
@@ -126,23 +123,12 @@ pub fn parse(tokens: Vec<Token>) -> Object {
                     }
                     (Token::Keyword(k), Token::Identifier(var)) if k == "is" => result
                         .get(var)
-                        .expect(format!("Didn't find {}", var).as_str())
+                        .expect(format!("Didn't find {var}").as_str())
                         .clone(),
                     (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
                 };
 
-                // TODO: And macro this
-                if let Some(obj) = result.get_mut(&name.to_lowercase()) {
-                    match obj {
-                        Value::Object(map) => map.insert(property.to_string(), value),
-                        tt => panic!("Expected {name} to be a object but found {tt:?}!"),
-                    };
-                } else {
-                    result.insert(
-                        name.to_string(),
-                        Value::Object(HashMap::from([(property.to_string(), value)])),
-                    );
-                }
+                set_obj_property!(result, name, property, value);
             }
             _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
         }
