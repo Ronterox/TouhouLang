@@ -1,15 +1,6 @@
-use touhoulang::{evaluate, parser::*};
+use std::collections::HashMap;
 
-macro_rules! list { ($($item: expr),*) => { Value::List(vec![$($item),*]) }; }
-
-macro_rules! obj {
-    ($id: literal, $value: expr) => {
-        Object {
-            id: $id.to_string(),
-            value: $value,
-        }
-    };
-}
+use touhoulang::{evaluate, val_num, val_obj, val_str};
 
 evaluate! {
     struct Globals {
@@ -26,10 +17,7 @@ evaluate! {
 
 #[test]
 fn evaluates_globals() {
-    let objs = vec![
-        obj!("text", Value::String("hi mom!".to_string())),
-        obj!("number", Value::Number(69.0)),
-    ];
+    let objs = HashMap::from([val_str!("text", "hi mom!"), val_num!("number", 69.0)]);
 
     let mut res = Globals {
         text: String::new(),
@@ -44,11 +32,10 @@ fn evaluates_globals() {
 
 #[test]
 fn evaluates_objects() {
-    let objs = vec![obj!("reimu", list![obj!("age", Value::Number(17.0))])];
+    let objs = HashMap::from([val_obj!("reimu", val_num!("age", 17.0))]);
 
     let mut res = Reimu { age: 0 };
     res.evaluate(objs);
 
     assert_eq!(res.age, 17);
 }
-

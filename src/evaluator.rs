@@ -30,11 +30,11 @@ macro_rules! parse_value {
 macro_rules! impl_evaluate {
     (Globals, $($field_name:ident: $field_type:tt,)*) => {
         impl Globals {
-            pub fn evaluate(&mut self, objs: Vec<$crate::parser::Object>) {
-                for obj in objs {
-                    match obj.id.as_str() {
+            pub fn evaluate(&mut self, objs: $crate::parser::Object) {
+                for (key, value) in objs.into_iter() {
+                    match key.as_str() {
                         $(stringify!($field_name) => {
-                            self.$field_name = $crate::parse_value!(obj.value, $field_type);
+                            self.$field_name = $crate::parse_value!(value, $field_type);
                         })*
                         _ => {},
                     }
@@ -44,19 +44,20 @@ macro_rules! impl_evaluate {
     };
     ($name: ident, $($field_name:ident: $field_type:tt,)*) => {
         impl $name {
-            pub fn evaluate(&mut self, objs: Vec<$crate::parser::Object>) {
-                if let Some(obj) = objs.iter().find(|o| o.id == stringify!($name).to_lowercase()) {
-                    if let $crate::parser::Value::List(list) = &obj.value {
-                        for obj in list {
-                            match obj.id.as_str() {
-                                $(stringify!($field_name) => {
-                                    self.$field_name = $crate::parse_value!(obj.value.clone(), $field_type);
-                                })*
-                                _ => {},
-                            }
-                        }
-                    } else {
-                        panic!("Expected {} to be a list of args", stringify!($name));
+            pub fn evaluate(&mut self, objs: $crate::parser::Object) {
+                if let Some(obj) = objs.get(&stringify!($name).to_lowercase()) {
+                    match obj {
+                       $crate::parser::Value::Object(map) => {
+                           for (key, value) in map.into_iter() {
+                               match key.as_str() {
+                                   $(stringify!($field_name) => {
+                                       self.$field_name = $crate::parse_value!(value.clone(), $field_type);
+                                   })*
+                                   _ => {},
+                               }
+                           }
+                       } ,
+                       tt => panic!("Expected {} to be a object but found {tt:?}!", stringify!($name)),
                     }
                 }
             }

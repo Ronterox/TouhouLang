@@ -25,10 +25,10 @@ fn main() {
 
     if serializer == "serde" {
         let reimu: ReimuSerde = serde_json::from_str(&data).expect("Failed to deserialize data");
-        println!("{:?}", reimu);
+        println!("{reimu:?}");
     } else if serializer == "touhoulang" {
         let reimu = Reimu::from_str(&data);
-        println!("{:?}", reimu);
+        println!("{reimu:?}");
     } else {
         panic!("Expected serializer name: 'serde' or 'touhoulang'");
     }

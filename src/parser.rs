@@ -1,119 +1,91 @@
+use std::collections::HashMap;
+
 use crate::tokenizer::Token;
 
-macro_rules! find_mut_obj {
-    ($list: ident, $name: ident) => {
-        $list.iter_mut().find(|o| o.id == *$name)
+#[macro_export]
+macro_rules! val_str {
+    ($name: literal, $str: literal) => {
+        (
+            $name.to_string(),
+            $crate::parser::Value::String($str.to_string()),
+        )
     };
 }
 
-macro_rules! find_obj {
-    ($list: ident, $name: ident) => {
-        $list.iter().find(|o| o.id == *$name)
+#[macro_export]
+macro_rules! val_num {
+    ($name: literal, $num: literal) => {
+        ($name.to_string(), $crate::parser::Value::Number($num))
     };
 }
 
-macro_rules! find_value {
-    ($list: ident, $name: ident) => {
-        find_obj!($list, $name).expect("Didn't find object").value
+#[macro_export]
+macro_rules! val_obj {
+    ($name: literal, $tuple: expr) => {
+        (
+            $name.to_string(),
+            $crate::parser::Value::Object(HashMap::from([$tuple])),
+        )
     };
 }
+
+pub type Object = std::collections::HashMap<String, Value>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Number(f32),
     String(String),
-    List(Vec<Object>),
+    List(Vec<Value>),
+    Object(Object),
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Object {
-    pub id: String,
-    pub value: Value,
-}
-
-pub fn parse(tokens: Vec<Token>) -> Vec<Object> {
+pub fn parse(tokens: Vec<Token>) -> Object {
     let mut tokens = tokens.iter();
-    let mut objects = Vec::<Object>::new();
+    let mut result = HashMap::<String, Value>::new();
 
     while let (Some(a), Some(b), Some(c)) = (tokens.next(), tokens.next(), tokens.next()) {
         match (a, b, c) {
             // ident! kword! num!
             (Token::Identifier(name), Token::Keyword(k), Token::Number(value)) if k == "is" => {
                 let value = Value::Number(*value);
-
-                if let Some(obj) = find_mut_obj!(objects, name) {
-                    obj.value = value;
-                } else {
-                    objects.push(Object {
-                        id: name.to_string(),
-                        value,
-                    });
-                }
+                result.insert(name.to_lowercase(), value);
             }
             // ident! kword! str!
             (Token::Identifier(name), Token::Keyword(k), Token::String(value)) if k == "is" => {
                 let value = Value::String(value.to_string());
-
-                if let Some(obj) = find_mut_obj!(objects, name) {
-                    obj.value = value;
-                } else {
-                    objects.push(Object {
-                        id: name.to_string(),
-                        value,
-                    });
-                }
+                result.insert(name.to_lowercase(), value);
             }
             // ident! kword! ident!
-            (Token::Identifier(name), Token::Keyword(k), Token::Identifier(var))
-                if k == "is" =>
-            {
-                let value = find_value!(objects, var).clone();
-
-                if let Some(obj) = find_mut_obj!(objects, name) {
-                    obj.value = value;
-                } else {
-                    objects.push(Object {
-                        id: name.to_string(),
-                        value,
-                    });
-                }
+            (Token::Identifier(name), Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
+                let value = result.get(var).expect(&format!("Didn't find {}", var));
+                result.insert(name.to_lowercase(), value.clone());
             }
             // ident! poss! ident!
             (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
                 if k == "s" =>
             {
                 let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
-                    (Token::Keyword(k), Token::Number(value)) if k == "is" => {
-                        Value::Number(*value)
-                    }
+                    (Token::Keyword(k), Token::Number(value)) if k == "is" => Value::Number(*value),
                     (Token::Keyword(k), Token::String(value)) if k == "is" => {
                         Value::String(value.to_string())
                     }
-                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
-                        find_value!(objects, var).clone()
-                    }
+                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => result
+                        .get(var)
+                        .expect(&format!("Didn't find {}", var))
+                        .clone(),
                     (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
                 };
 
-                if let Some(obj) = find_mut_obj!(objects, name) {
-                    match &mut obj.value {
-                        Value::List(list) => match find_mut_obj!(list, property) {
-                            Some(obj) => obj.value = value,
-                            None => list.push(Object {
-                                id: property.to_string(),
-                                value,
-                            }),
-                        },
-                        _ => panic!("Expected {name} to be a list of args"),
-                    }
+                if let Some(obj) = result.get_mut(&name.to_lowercase()) {
+                    match obj {
+                        Value::Object(map) => map.insert(property.to_string(), value),
+                        tt => panic!("Expected {name} to be a object but found {tt:?}!"),
+                    };
                 } else {
-                    objects.push(Object {
-                        id: name.to_string(),
-                        value: Value::List(vec![Object {
-                            id: property.to_string(),
-                            value,
-                        }]),
-                    });
+                    result.insert(
+                        name.to_string(),
+                        Value::Object(HashMap::from([(property.to_string(), value)])),
+                    );
                 }
             }
             // ident! poss! ident!
@@ -123,29 +95,24 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Object> {
                 let value = match tokens.next().unwrap() {
                     Token::Number(value) => Value::Number(*value),
                     Token::String(value) => Value::String(value.to_string()),
-                    Token::Identifier(var) => find_value!(objects, var).clone(),
+                    Token::Identifier(var) => result
+                        .get(&var.to_lowercase())
+                        .expect(&format!("Didn't find {}", var))
+                        .clone(),
                     _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
                 };
 
-                match find_mut_obj!(objects, name) {
-                    Some(obj) => match &mut obj.value {
-                        Value::List(list) => match find_mut_obj!(list, property) {
-                            Some(obj) => obj.value = value,
-                            None => list.push(Object {
-                                id: property.to_string(),
-                                value,
-                            }),
-                        },
-                        _ => panic!("Expected {name} to be a list of args"),
-                    },
-                    None => objects.push(Object {
-                        id: name.to_string(),
-                        value: Value::List(vec![Object {
-                            id: property.to_string(),
-                            value,
-                        }]),
-                    }),
-                }
+                if let Some(obj) = result.get_mut(&name.to_lowercase()) {
+                    match obj {
+                        Value::Object(map) => map.insert(property.to_string(), value),
+                        tt => panic!("Expected {name} to be a object but found {tt:?}!"),
+                    }
+                } else {
+                    result.insert(
+                        name.to_string(),
+                        Value::Object(HashMap::from([(property.to_string(), value)])),
+                    )
+                };
             }
             // ident! poss! ident!
             (Token::Identifier(property), Token::Possesive(k), Token::Identifier(name))
@@ -153,43 +120,33 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Object> {
             {
                 // TODO: Macro his
                 let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
-                    (Token::Keyword(k), Token::Number(value)) if k == "is" => {
-                        Value::Number(*value)
-                    }
+                    (Token::Keyword(k), Token::Number(value)) if k == "is" => Value::Number(*value),
                     (Token::Keyword(k), Token::String(value)) if k == "is" => {
                         Value::String(value.to_string())
                     }
-                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => {
-                        find_value!(objects, var).clone()
-                    }
+                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => result
+                        .get(var)
+                        .expect(format!("Didn't find {}", var).as_str())
+                        .clone(),
                     (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
                 };
 
                 // TODO: And macro this
-                match find_mut_obj!(objects, name) {
-                    Some(obj) => match &mut obj.value {
-                        Value::List(list) => match find_mut_obj!(list, property) {
-                            Some(obj) => obj.value = value,
-                            None => list.push(Object {
-                                id: property.to_string(),
-                                value,
-                            }),
-                        },
-                        _ => panic!("Expected {name} to be a list of args"),
-                    },
-                    None => objects.push(Object {
-                        id: name.to_string(),
-                        value: Value::List(vec![Object {
-                            id: property.to_string(),
-                            value,
-                        }]),
-                    }),
+                if let Some(obj) = result.get_mut(&name.to_lowercase()) {
+                    match obj {
+                        Value::Object(map) => map.insert(property.to_string(), value),
+                        tt => panic!("Expected {name} to be a object but found {tt:?}!"),
+                    };
+                } else {
+                    result.insert(
+                        name.to_string(),
+                        Value::Object(HashMap::from([(property.to_string(), value)])),
+                    );
                 }
             }
             _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
         }
     }
 
-    objects
+    result
 }
-
