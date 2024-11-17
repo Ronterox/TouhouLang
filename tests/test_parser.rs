@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use touhoulang::{parser::*, token_macro, tokenizer::Token, val_num, val_obj, val_str};
+use touhoulang::{parser::*, token_macro, tokenizer::Token, val_list, val_num, val_obj, val_str};
 
 token_macro!(ident, Identifier);
 token_macro!(num, Number);
@@ -189,5 +189,24 @@ fn updates_attribute() {
             val_num!("age", 18.0),
             val_obj!("marisa", val_num!("age", 18.0)),
         ],
+    );
+}
+
+#[test]
+fn parses_list() {
+    expect(
+        [
+            ident!("reimu"),
+            poss!("has"),
+            ident!("moves"),
+            ident!("top"),
+            ident!("right"),
+            ident!("left"),
+            ident!("down"),
+        ],
+        [val_obj!(
+            "reimu",
+            val_list!("moves", String, "top", "right", "left", "down")
+        )],
     );
 }

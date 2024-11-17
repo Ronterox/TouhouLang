@@ -1,5 +1,9 @@
 {
     "name": "Reimu",
     "age": 18,
-    "damage": 785.845
+    "damage": 785.845,
+    "items": [
+        "sword",
+        "bow"
+    ]
 }

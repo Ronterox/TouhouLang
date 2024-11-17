@@ -30,6 +30,16 @@ macro_rules! val_obj {
 }
 
 #[macro_export]
+macro_rules! val_list {
+    ($name: literal, $value: ident, $($list: expr),*) => {
+        (
+            $name.to_string(),
+            $crate::parser::Value::List([$($crate::parser::Value::$value($list.into())),*].to_vec()),
+        )
+    };
+}
+
+#[macro_export]
 macro_rules! set_obj_property {
     ($result: ident, $name: ident, $property: ident, $value: ident) => {
         if let Some(obj) = $result.get_mut(&$name.to_lowercase()) {
