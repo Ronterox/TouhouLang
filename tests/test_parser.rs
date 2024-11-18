@@ -197,12 +197,13 @@ fn parses_list() {
     expect(
         [
             ident!("reimu"),
-            poss!("has"),
+            poss!("s"),
             ident!("moves"),
-            ident!("top"),
-            ident!("right"),
-            ident!("left"),
-            ident!("down"),
+            kword!("are"),
+            str!("top"),
+            str!("right"),
+            str!("left"),
+            str!("down"),
         ],
         [val_obj!(
             "reimu",

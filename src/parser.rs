@@ -21,10 +21,10 @@ macro_rules! val_num {
 
 #[macro_export]
 macro_rules! val_obj {
-    ($name: literal, $tuple: expr) => {
+    ($name: literal, $($tuple: expr),*) => {
         (
             $name.to_string(),
-            $crate::parser::Value::Object(HashMap::from([$tuple])),
+            $crate::parser::Value::Object(HashMap::from([$($tuple),*])),
         )
     };
 }
@@ -56,7 +56,7 @@ macro_rules! set_obj_property {
     };
 }
 
-pub type Object = std::collections::HashMap<String, Value>;
+pub type Object = HashMap<String, Value>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
@@ -67,8 +67,8 @@ pub enum Value {
 }
 
 pub fn parse(tokens: Vec<Token>) -> Object {
-    let mut tokens = tokens.iter();
-    let mut result = HashMap::<String, Value>::new();
+    let mut tokens = tokens.iter().peekable();
+    let mut result = Object::new();
 
     while let (Some(a), Some(b), Some(c)) = (tokens.next(), tokens.next(), tokens.next()) {
         match (a, b, c) {
@@ -91,16 +91,39 @@ pub fn parse(tokens: Vec<Token>) -> Object {
             (Token::Identifier(name), Token::Possesive(k), Token::Identifier(property))
                 if k == "s" =>
             {
-                let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
-                    (Token::Keyword(k), Token::Number(value)) if k == "is" => Value::Number(*value),
-                    (Token::Keyword(k), Token::String(value)) if k == "is" => {
-                        Value::String(value.to_string())
-                    }
-                    (Token::Keyword(k), Token::Identifier(var)) if k == "is" => result
-                        .get(var)
-                        .expect(&format!("Didn't find {var}"))
-                        .clone(),
-                    (d, e) => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d, e]),
+                let kword = tokens.next().unwrap();
+                let value = match kword {
+                    Token::Keyword(k) if k == "is" => match tokens.next().unwrap() {
+                        Token::Number(value) => Value::Number(*value),
+                        Token::String(value) => Value::String(value.to_string()),
+                        Token::Identifier(var) => result
+                            .get(var)
+                            .expect(&format!("Didn't find {var}"))
+                            .clone(),
+                        d => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, kword, d]),
+                    },
+                    Token::Keyword(k) if k == "are" => match tokens.next().unwrap() {
+                        Token::Number(value) => {
+                            let mut ls = vec![Value::Number(*value)];
+
+                            while let Some(Token::Number(value)) = tokens.next() {
+                                ls.push(Value::Number(*value));
+                            }
+
+                            Value::List(ls)
+                        }
+                        Token::String(value) => {
+                            let mut ls = vec![Value::String(value.to_string())];
+
+                            while let Some(Token::String(value)) = tokens.next() {
+                                ls.push(Value::String(value.to_string()));
+                            }
+
+                            Value::List(ls)
+                        }
+                        d => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, kword, d]),
+                    },
+                    d => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c, d]),
                 };
 
                 set_obj_property!(result, name, property, value);
@@ -125,7 +148,6 @@ pub fn parse(tokens: Vec<Token>) -> Object {
             (Token::Identifier(property), Token::Possesive(k), Token::Identifier(name))
                 if k == "of" =>
             {
-                // TODO: Macro his
                 let value = match (tokens.next().unwrap(), tokens.next().unwrap()) {
                     (Token::Keyword(k), Token::Number(value)) if k == "is" => Value::Number(*value),
                     (Token::Keyword(k), Token::String(value)) if k == "is" => {
@@ -141,6 +163,10 @@ pub fn parse(tokens: Vec<Token>) -> Object {
                 set_obj_property!(result, name, property, value);
             }
             _ => panic!("Unexpected token pattern: ->{:?}<-", [a, b, c]),
+        }
+
+        if let Some(Token::Punctuation(_)) = tokens.peek() {
+            tokens.next();
         }
     }
 

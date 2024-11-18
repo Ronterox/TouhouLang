@@ -11,6 +11,15 @@ macro_rules! parse_number {
 
 #[macro_export(local_inner_macros)]
 macro_rules! parse_value {
+    ($value: expr, Vec, $gtype: tt) => {
+        match $value {
+            $crate::parser::Value::List(ls) => ls
+                .into_iter()
+                .map(|v| $crate::parse_value!(v, $gtype))
+                .collect(),
+            _ => std::panic!("Expected list"),
+        }
+    };
     ($value: expr, String) => {
         match $value {
             $crate::parser::Value::String(s) => s,
@@ -27,14 +36,21 @@ macro_rules! parse_value {
 }
 
 #[macro_export]
+macro_rules! set_field {
+    ($field: expr, $value: expr, $ftype:tt$(<$gtype:tt>)?) => {
+        $field = $crate::parse_value!($value, $ftype $(,$gtype)?);
+    };
+}
+
+#[macro_export]
 macro_rules! impl_evaluate {
-    (Globals, $($field_name:ident: $field_type:tt,)*) => {
+    (Globals, $($field_name:ident: $ftype:tt$(<$gtype:tt>)?,)*) => {
         impl Globals {
             pub fn evaluate(&mut self, objs: $crate::parser::Object) {
                 for (key, value) in objs.into_iter() {
                     match key.as_str() {
                         $(stringify!($field_name) => {
-                            self.$field_name = $crate::parse_value!(value, $field_type);
+                            $crate::set_field!(self.$field_name, value, $ftype$(<$gtype>)?);
                         })*
                         _ => {},
                     }
@@ -42,7 +58,7 @@ macro_rules! impl_evaluate {
             }
         }
     };
-    ($name: ident, $($field_name:ident: $field_type:tt,)*) => {
+    ($name: ident, $($field_name:ident: $ftype:tt$(<$gtype:tt>)?,)*) => {
         impl $name {
             pub fn evaluate(&mut self, objs: $crate::parser::Object) {
                 if let Some(obj) = objs.get(&stringify!($name).to_lowercase()) {
@@ -51,7 +67,7 @@ macro_rules! impl_evaluate {
                            for (key, value) in map.into_iter() {
                                match key.as_str() {
                                    $(stringify!($field_name) => {
-                                       self.$field_name = $crate::parse_value!(value.clone(), $field_type);
+                                       $crate::set_field!(self.$field_name, value.clone(), $ftype$(<$gtype>)?);
                                    })*
                                    _ => {},
                                }
@@ -67,8 +83,8 @@ macro_rules! impl_evaluate {
 
 #[macro_export]
 macro_rules! impl_struct {
-    ($name: ident, $($field_name:ident: $field_type:tt,)*) => {
-        $crate::impl_evaluate!($name, $($field_name: $field_type,)*);
+    ($name: ident, $($field_name:ident: $ftype:tt$(<$gtype:tt>)?,)*) => {
+        $crate::impl_evaluate!($name, $($field_name: $ftype$(<$gtype>)?,)*);
 
         impl $name {
             #[allow(dead_code)]
@@ -91,16 +107,16 @@ macro_rules! evaluate {
     (
     $(#[$doc:meta])*
     struct $name: ident {
-        $($field_name:ident: $field_type:tt,)*
+        $($field_name:ident: $ftype:tt$(<$gtype:tt>)?,)*
     }
     ) => {
         $(#[$doc])*
         #[derive(Default)]
         struct $name {
-            $($field_name: $field_type,)*
+            $($field_name: $ftype$(<$gtype>)?,)*
         }
 
-        $crate::impl_struct!($name, $($field_name: $field_type,)*);
+        $crate::impl_struct!($name, $($field_name: $ftype$(<$gtype>)?,)*);
     }
 }
 
@@ -109,9 +125,9 @@ macro_rules! evaluate_derive {
     (
     $(#[$doc:meta])*
     struct $name: ident {
-        $($field_name:ident: $field_type:tt,)*
+        $($field_name:ident: $ftype:tt$(<$gtype:tt>)?,)*
     }
     ) => {
-        $crate::impl_struct!($name, $($field_name: $field_type,)*);
+        $crate::impl_struct!($name, $($field_name: $ftype$(<$gtype>)?,)*);
     }
 }

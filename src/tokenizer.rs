@@ -1,6 +1,7 @@
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     String(String),
+    Punctuation(String),
     Preposition(String),
     Possesive(String),
     Identifier(String),
@@ -29,6 +30,7 @@ macro_rules! token_macro {
 
 const PREPOSITIONS: [&str; 5] = ["the", "a", "an", "and", "also"];
 const KEYWORDS: [&str; 1] = ["is"];
+const PUNCTUATION: [&str; 2] = [".", ","];
 const POSSESIVES: [&str; 4] = ["s", "of", "has", "have"];
 
 macro_rules! contains {
@@ -72,8 +74,14 @@ pub fn tokenize(text: &str) -> Vec<Token> {
                 Token::String(string)
             }
             c if c.is_whitespace() || c.is_ascii_punctuation() => {
+                let c = c.to_string();
                 chars.next();
-                Token::None
+
+                if contains!(PUNCTUATION, c) {
+                    Token::Punctuation(c)
+                } else {
+                    Token::None
+                }
             }
             _ => panic!("Unexpected character: ->{c}<-"),
         };
@@ -88,4 +96,3 @@ pub fn tokenize(text: &str) -> Vec<Token> {
         })
         .collect();
 }
-
