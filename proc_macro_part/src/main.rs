@@ -7,6 +7,7 @@ struct ReimuSerde {
     name: String,
     age: i32,
     damage: f32,
+    items: Vec<String>,
 }
 
 #[derive(Evaluate, Default, Debug)]
@@ -14,6 +15,7 @@ struct Reimu {
     name: String,
     age: i32,
     damage: f32,
+    items: Vec<String>,
 }
 
 fn main() {

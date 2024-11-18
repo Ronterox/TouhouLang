@@ -24,6 +24,7 @@ mod test_integration {
     evaluate! {
         struct Marisa {
             age: i32,
+            items: Vec<String>,
         }
     }
 

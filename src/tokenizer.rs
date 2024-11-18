@@ -29,7 +29,7 @@ macro_rules! token_macro {
 }
 
 const PREPOSITIONS: [&str; 5] = ["the", "a", "an", "and", "also"];
-const KEYWORDS: [&str; 1] = ["is"];
+const KEYWORDS: [&str; 2] = ["is", "are"];
 const PUNCTUATION: [&str; 2] = [".", ","];
 const POSSESIVES: [&str; 4] = ["s", "of", "has", "have"];
 
