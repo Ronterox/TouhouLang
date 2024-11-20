@@ -3,11 +3,28 @@ use touhoulang::*;
 use touhoulang_macro::Evaluate;
 
 #[derive(Serialize, Deserialize, Debug)]
+struct MarisaSerde {
+    name: String,
+    age: i32,
+    damage: f32,
+    nums: Vec<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct ReimuSerde {
     name: String,
     age: i32,
     damage: f32,
     items: Vec<String>,
+    friend: MarisaSerde,
+}
+
+#[derive(Evaluate, Default, Debug)]
+struct Marisa {
+    name: String,
+    age: i32,
+    damage: f32,
+    nums: Vec<u32>,
 }
 
 #[derive(Evaluate, Default, Debug)]
@@ -16,6 +33,7 @@ struct Reimu {
     age: i32,
     damage: f32,
     items: Vec<String>,
+    friend: Marisa,
 }
 
 fn main() {

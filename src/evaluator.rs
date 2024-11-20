@@ -11,15 +11,6 @@ macro_rules! parse_number {
 
 #[macro_export(local_inner_macros)]
 macro_rules! parse_value {
-    ($value: expr, Vec, $gtype: tt) => {
-        match $value {
-            $crate::parser::Value::List(ls) => ls
-                .into_iter()
-                .map(|v| $crate::parse_value!(v, $gtype))
-                .collect(),
-            _ => std::panic!("Expected list"),
-        }
-    };
     ($value: expr, String) => {
         match $value {
             $crate::parser::Value::String(s) => s,
@@ -30,8 +21,31 @@ macro_rules! parse_value {
     ($value: expr, i32) => {
         parse_number!($value, i32)
     };
+    ($value: expr, u32) => {
+        parse_number!($value, u32)
+    };
     ($value: expr, f32) => {
         parse_number!($value, f32)
+    };
+    ($value: expr, $obj: tt) => {
+        match $value {
+            $crate::parser::Value::Object(map) => {
+                let map = std::collections::HashMap::from([(std::stringify!($obj).to_lowercase(), $value)]);
+                let mut obj = $obj::default();
+                obj.evaluate(map);
+                obj
+            },
+            d => std::panic!("Expected an object got {d:?}"),
+        }
+    };
+    ($value: expr, Vec, $gtype: tt) => {
+        match $value {
+            $crate::parser::Value::List(ls) => ls
+                .into_iter()
+                .map(|v| $crate::parse_value!(v, $gtype))
+                .collect(),
+            _ => std::panic!("Expected list"),
+        }
     };
 }
 

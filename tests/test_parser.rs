@@ -211,3 +211,23 @@ fn parses_list() {
         )],
     );
 }
+
+#[test]
+fn parses_object_attribute() {
+    expect(
+        [
+            ident!("max"),
+            poss!("of"),
+            ident!("health"),
+            kword!("is"),
+            num!(50.0),
+            //
+            ident!("marisa"),
+            poss!("s"),
+            ident!("health"),
+            kword!("is"),
+            ident!("health"),
+        ],
+        [val_obj!("marisa", val_obj!("health", val_num!("max", 50.0)))],
+    );
+}

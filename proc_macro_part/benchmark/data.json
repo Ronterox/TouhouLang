@@ -5,5 +5,16 @@
     "items": [
         "sword",
         "bow"
-    ]
+    ],
+    "friend": {
+        "name": "Marisa",
+        "age": 19,
+        "damage": 585,
+        "nums": [
+            1,
+            2,
+            3,
+            4
+        ]
+    }
 }

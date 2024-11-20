@@ -10,10 +10,18 @@ evaluate! {
 }
 
 evaluate! {
+    struct Health {
+        current: u32,
+        max: u32,
+    }
+}
+
+evaluate! {
     struct Reimu {
         age: i32,
         items: Vec<String>,
         numbers: Vec<i32>,
+        health: Health,
     }
 }
 
@@ -36,6 +44,7 @@ fn evaluates_globals() {
 fn evaluates_objects() {
     let objs = HashMap::from([val_obj!(
         "reimu",
+        val_obj!("health", val_num!("current", 100.0), val_num!("max", 100.0)),
         val_num!("age", 17.0),
         val_list!("items", String, "bow", "arrow"),
         val_list!("numbers", Number, 1., 2., 3.)
@@ -45,10 +54,13 @@ fn evaluates_objects() {
         age: 0,
         items: Vec::new(),
         numbers: Vec::new(),
+        health: Health::default(),
     };
     res.evaluate(objs);
 
     assert_eq!(res.age, 17);
     assert_eq!(res.items, vec!["bow".to_string(), "arrow".to_string()]);
     assert_eq!(res.numbers, vec![1, 2, 3]);
+    assert_eq!(res.health.current, 100);
+    assert_eq!(res.health.max, 100);
 }

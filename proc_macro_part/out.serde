@@ -1,0 +1,1 @@
+ReimuSerde { name: "Reimu", age: 18, damage: 785.845, items: ["sword", "bow"], friend: MarisaSerde { name: "Marisa", age: 19, damage: 585.0, nums: [1, 2, 3, 4] } }
